@@ -58,8 +58,6 @@ import java.util.List;
 @Mod.EventBusSubscriber(value = Dist.CLIENT, modid = EquipmentMod.MOD_ID)
 public class ClientEventsHandler {
     private static final Style LORE_STYLE = Style.EMPTY.withColor(ChatFormatting.DARK_PURPLE).withItalic(true);
-    private static final int LORE_SPACING_HEIGHT = 4;
-
     public static double shakeTime = 0;
     public static double shakeRadius = 0;
     public static double shakeAmplitude = 0;
@@ -340,6 +338,25 @@ public class ClientEventsHandler {
      * 在名称下方的 NBT Lore 与后续属性之间加入小于一整行的透明间距。
      */
     @SubscribeEvent
+    public static void replaceCustomTooltipSpacerMarkers(RenderTooltipEvent.GatherComponents event) {
+        if (!(event.getItemStack().getItem() instanceof ICustomItem)) {
+            return;
+        }
+
+        List<Either<net.minecraft.network.chat.FormattedText, net.minecraft.world.inventory.tooltip.TooltipComponent>>
+                elements = event.getTooltipElements();
+        for (int i = 0; i < elements.size(); i++) {
+            var element = elements.get(i);
+            if (element.left().filter(TooltipSpacer::isMarker).isPresent()) {
+                elements.set(i, Either.right(new TooltipSpacer(TooltipSpacer.HALF_LINE_HEIGHT)));
+            }
+        }
+    }
+
+    /**
+     * 在名称下方的 NBT Lore 与后续属性之间加入小于一整行的透明间距。
+     */
+    @SubscribeEvent
     public static void addSpacingAfterCustomItemLore(RenderTooltipEvent.GatherComponents event) {
         ItemStack stack = event.getItemStack();
         if (!(stack.getItem() instanceof ICustomItem)) {
@@ -373,7 +390,7 @@ public class ClientEventsHandler {
                 elements = event.getTooltipElements();
         int insertionIndex = Math.min(1 + validLoreLines, elements.size());
         if (insertionIndex < elements.size()) {
-            elements.add(insertionIndex, Either.right(new TooltipSpacer(LORE_SPACING_HEIGHT)));
+            elements.add(insertionIndex, Either.right(new TooltipSpacer(TooltipSpacer.HALF_LINE_HEIGHT)));
         }
     }
 

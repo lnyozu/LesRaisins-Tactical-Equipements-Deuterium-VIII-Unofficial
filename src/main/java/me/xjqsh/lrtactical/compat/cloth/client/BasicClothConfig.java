@@ -20,7 +20,7 @@ public class BasicClothConfig {
         root.getOrCreateCategory(Component.translatable("config.lrtactical.grenade"))
                 .addEntry(
                         entryBuilder.startBooleanToggle(Component.translatable("config.lrtactical.grenade.explode"), CommonConfig.GRENADE_EXPLOSION_BLOCK_DAMAGE.get())
-                                .setDefaultValue(true)
+                                .setDefaultValue(false)
                                 .setTooltip(Component.translatable("config.lrtactical.grenade.explode.desc"))
                                 .setSaveConsumer(CommonConfig.GRENADE_EXPLOSION_BLOCK_DAMAGE::set)
                                 .build()
@@ -36,9 +36,30 @@ public class BasicClothConfig {
         root.getOrCreateCategory(Component.translatable("config.lrtactical.melee"))
                 .addEntry(
                         entryBuilder.startBooleanToggle(Component.translatable("config.lrtactical.melee.durability"), CommonConfig.MELEE_ITEM_CONSUME_DURABILITY.get())
-                                .setDefaultValue(true)
-                                .setTooltip(Component.translatable("config.lrtactical.effect.durability.desc"))
+                                .setDefaultValue(false)
+                                .setTooltip(Component.translatable("config.lrtactical.melee.durability.desc"))
                                 .setSaveConsumer(CommonConfig.MELEE_ITEM_CONSUME_DURABILITY::set)
+                                .build()
+                )
+                .addEntry(
+                        entryBuilder.startBooleanToggle(Component.translatable("config.lrtactical.melee.enchantment_effects"), CommonConfig.MELEE_ENCHANTMENT_EFFECTS_ENABLED.get())
+                                .setDefaultValue(false)
+                                .setTooltip(Component.translatable("config.lrtactical.melee.enchantment_effects.desc"))
+                                .setSaveConsumer(CommonConfig.MELEE_ENCHANTMENT_EFFECTS_ENABLED::set)
+                                .build()
+                )
+                .addEntry(
+                        entryBuilder.startBooleanToggle(Component.translatable("config.lrtactical.melee.anvil_enchanting"), CommonConfig.MELEE_ANVIL_ENCHANTING_ENABLED.get())
+                                .setDefaultValue(false)
+                                .setTooltip(Component.translatable("config.lrtactical.melee.anvil_enchanting.desc"))
+                                .setSaveConsumer(CommonConfig.MELEE_ANVIL_ENCHANTING_ENABLED::set)
+                                .build()
+                )
+                .addEntry(
+                        entryBuilder.startBooleanToggle(Component.translatable("config.lrtactical.melee.table_enchanting"), CommonConfig.MELEE_ENCHANTING_TABLE_ENABLED.get())
+                                .setDefaultValue(false)
+                                .setTooltip(Component.translatable("config.lrtactical.melee.table_enchanting.desc"))
+                                .setSaveConsumer(CommonConfig.MELEE_ENCHANTING_TABLE_ENABLED::set)
                                 .build()
                 )
                 .addEntry(

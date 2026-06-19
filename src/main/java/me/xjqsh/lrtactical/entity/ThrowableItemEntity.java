@@ -2,6 +2,7 @@ package me.xjqsh.lrtactical.entity;
 
 
 import me.xjqsh.lrtactical.api.item.IThrowable;
+import me.xjqsh.lrtactical.config.ServerConfig;
 import me.xjqsh.lrtactical.init.ModItems;
 import me.xjqsh.lrtactical.init.ModSounds;
 import me.xjqsh.lrtactical.item.throwable.EntityData;
@@ -271,6 +272,12 @@ public abstract class ThrowableItemEntity extends Projectile implements IEntityA
     @Override
     public void tick() {
         super.tick();
+        if (!this.level().isClientSide()
+                && this.tickCount >= ServerConfig.getThrowableForceCleanupTimeTicks()) {
+            this.discard();
+            return;
+        }
+
         var result = this.doMultiBounce(this.getDeltaMovement());
 
         this.checkInsideBlocks();

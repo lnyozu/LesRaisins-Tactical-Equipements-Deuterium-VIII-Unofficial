@@ -7,6 +7,7 @@ public class ServerConfig {
     public static ForgeConfigSpec.IntValue FLASH_SHIELD_COOLDOWN;
 
     public static ForgeConfigSpec.DoubleValue CROUCHING_INIT_SPEED_PERCENT;
+    public static ForgeConfigSpec.IntValue THROWABLE_FORCE_CLEANUP_TIME_SECONDS;
 
     public static ForgeConfigSpec.IntValue MELEE_MAX_TARGET_PER_PACKET;
 
@@ -26,6 +27,9 @@ public class ServerConfig {
         CROUCHING_INIT_SPEED_PERCENT = builder
                 .comment("modifier of initial speed when crouching, 1.0 means no change")
                 .defineInRange("flash_shield_cooldown", 0.5f, 0.01, 2);
+        THROWABLE_FORCE_CLEANUP_TIME_SECONDS = builder
+                .comment("Maximum lifetime of any throwable entity before it is silently removed; does not trigger its fuse effect")
+                .defineInRange("throwable_force_cleanup_time_seconds", 30 * 60, 1, 24 * 60 * 60);
         builder.pop();
 
         builder.push("melee");
@@ -35,5 +39,9 @@ public class ServerConfig {
         builder.pop();
 
         return builder.build();
+    }
+
+    public static int getThrowableForceCleanupTimeTicks() {
+        return THROWABLE_FORCE_CLEANUP_TIME_SECONDS.get() * 20;
     }
 }

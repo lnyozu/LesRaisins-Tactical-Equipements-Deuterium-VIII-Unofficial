@@ -1,10 +1,9 @@
 package me.xjqsh.lrtactical.entity;
 
 import me.xjqsh.lrtactical.config.CommonConfig;
+import me.xjqsh.lrtactical.network.NetworkHandler;
+import me.xjqsh.lrtactical.network.message.SExplosionEffect;
 import me.xjqsh.lrtactical.util.CustomExplosion;
-import me.xjqsh.lrtactical.util.ParticleUtil;
-import net.minecraft.core.particles.ParticleTypes;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EntityType;
@@ -70,17 +69,17 @@ public class GrenadeEntity extends ThrowableItemEntity {
             explosion.setScreenShakeTime(Math.min(this.screenShakeTime, 60.0));
             explosion.setDestroyMultiplier(clampedDestroy);
             if (ForgeEventFactory.onExplosionStart(level(), explosion)) {
+                // 插件或其他模组取消爆炸时也必须移除实体，避免产生永久哑弹。
+                super.onDeath(hitResult);
                 return;
             }
             explosion.explode();
-            explosion.finalizeExplosion(true);
-            if (this.level() instanceof ServerLevel level) {
-                double x = pos.x();
-                double y = pos.y();
-                double z = pos.z();
-                ParticleUtil.sendParticle(level, ParticleTypes.FLASH, x, y + 0.5, z, 50, 0.2, 0.2, 0.2, 20, true);
-                ParticleUtil.sendParticle(level, ParticleTypes.EXPLOSION_EMITTER, x, y + 1, z, 5, 0.7, 0.7, 0.7, 1, true);
-            }
+            // 服务端只处理伤害和方块；客户端收到一个小型效果包后自行生成视觉效果。
+            explosion.finalizeExplosion(false);
+            NetworkHandler.sendToNearbyPlayers(
+                    new SExplosionEffect(pos, clampedRadius, type != Explosion.BlockInteraction.KEEP),
+                    this.level(), pos, 96.0D
+            );
         }
         super.onDeath(hitResult);
     }

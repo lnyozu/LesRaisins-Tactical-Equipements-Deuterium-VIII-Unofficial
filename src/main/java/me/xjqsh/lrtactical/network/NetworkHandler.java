@@ -16,7 +16,7 @@ import net.minecraftforge.network.simple.SimpleChannel;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class NetworkHandler {
-    private static final String VERSION = "0.4.0";
+    private static final String VERSION = "0.4.1";
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(new ResourceLocation(EquipmentMod.MOD_ID, "network"),
             () -> VERSION, it -> it.equals(VERSION), it -> it.equals(VERSION));
 
@@ -92,6 +92,18 @@ public class NetworkHandler {
                 CCancelToggleConsumableUse::encode,
                 CCancelToggleConsumableUse::new,
                 CCancelToggleConsumableUse::handle
+        );
+        CHANNEL.registerMessage(ID_COUNT.getAndIncrement(),
+                SSmokeState.class,
+                SSmokeState::encode,
+                SSmokeState::decode,
+                SSmokeState::handle
+        );
+        CHANNEL.registerMessage(ID_COUNT.getAndIncrement(),
+                SExplosionEffect.class,
+                SExplosionEffect::encode,
+                SExplosionEffect::decode,
+                SExplosionEffect::handle
         );
     }
 

@@ -151,14 +151,6 @@ public interface IMeleeWeapon extends ICustomItem {
         if (!target.isAttackable()) return AttackResult.MISS;
         if (target.skipAttackInteraction(attacker)) return AttackResult.MISS;
 
-        float modifier;
-        if (target instanceof LivingEntity living) {
-            modifier = EnchantmentHelper.getDamageBonus(stack, living.getMobType());
-        } else {
-            modifier = EnchantmentHelper.getDamageBonus(stack, MobType.UNDEFINED);
-        }
-
-
         boolean flag2 = attacker.fallDistance > 0.0F && !attacker.onGround() && !attacker.onClimbable() && !attacker.isInWater()
                 && !attacker.hasEffect(MobEffects.BLINDNESS) && !attacker.isPassenger() && target instanceof LivingEntity;
 
@@ -169,29 +161,38 @@ public interface IMeleeWeapon extends ICustomItem {
             flag2 = true;
         }
 
-        int j = EnchantmentHelper.getFireAspect(attacker);
-        if (target instanceof LivingEntity living) {
-            if (j > 0) {
-                living.setSecondsOnFire(j * 4);
-            }
-        }
-
         if (target.invulnerableTime < CommonConfig.MELEE_IGNORE_INVULNERABLE_TICK_THRESHOLD.get()) {
             target.invulnerableTime = 0;
         }
 
-        boolean result = target.hurt(attacker.damageSources().playerAttack(attacker), base + modifier);
-        // 如果目标实体实际没有受到攻击，则不应用其他效果了，比如击退和附魔后效等
+        float enchantmentDamage = 0.0F;
+        int fireAspect = 0;
+        if (CommonConfig.MELEE_ENCHANTMENT_EFFECTS_ENABLED.get()) {
+            enchantmentDamage = target instanceof LivingEntity living
+                    ? EnchantmentHelper.getDamageBonus(stack, living.getMobType())
+                    : EnchantmentHelper.getDamageBonus(stack, MobType.UNDEFINED);
+            fireAspect = EnchantmentHelper.getFireAspect(attacker);
+        }
+
+        boolean result = target.hurt(attacker.damageSources().playerAttack(attacker), base + enchantmentDamage);
+        // 如果目标实体实际没有受到攻击，则不应用击退等其他效果。
         if (!result) {
             return AttackResult.MISS;
         }
 
         if (target instanceof LivingEntity living) {
+            if (fireAspect > 0) {
+                living.setSecondsOnFire(fireAspect * 4);
+            }
             living.knockback(knockback, Mth.sin(attacker.getYRot() * ((float)Math.PI / 180F)), -Mth.cos(attacker.getYRot() * ((float)Math.PI / 180F)));
-            EnchantmentHelper.doPostHurtEffects(living, attacker);
+            if (CommonConfig.MELEE_ENCHANTMENT_EFFECTS_ENABLED.get()) {
+                EnchantmentHelper.doPostHurtEffects(living, attacker);
+            }
         }
 
-        EnchantmentHelper.doPostDamageEffects(attacker, target);
+        if (CommonConfig.MELEE_ENCHANTMENT_EFFECTS_ENABLED.get()) {
+            EnchantmentHelper.doPostDamageEffects(attacker, target);
+        }
 
         if (flag2) {
             attacker.crit(target);

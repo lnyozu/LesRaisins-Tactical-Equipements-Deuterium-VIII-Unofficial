@@ -29,7 +29,7 @@ group = mod_group_id
 version = mod_version + '-' + FORMAT.format(new Date())
 
 base {
-    archivesName = mod_id + '-' + minecraft_version
+    archivesName = mod_id + '-unofficial-' + minecraft_version
 }
 
 java {

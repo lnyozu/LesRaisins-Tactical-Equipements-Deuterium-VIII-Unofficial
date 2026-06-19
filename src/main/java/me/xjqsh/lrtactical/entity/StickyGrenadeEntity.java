@@ -77,6 +77,9 @@ public class StickyGrenadeEntity extends GrenadeEntity {
     @Override
     public void tick() {
         super.tick();
+        if (this.isRemoved()) {
+            return;
+        }
         if (this.entityData.get(STICKED)) {
             this.setDeltaMovement(Vec3.ZERO);
             this.setNoGravity(true);

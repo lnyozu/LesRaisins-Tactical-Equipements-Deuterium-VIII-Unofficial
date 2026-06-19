@@ -21,6 +21,7 @@
     // tick
     "put_away_time": 14,
     "max_durability": 240,
+    // 仅在配置开启附魔台附魔时使用
     "enchantment_value": 8,
     "attack": {
       "attack_left": {

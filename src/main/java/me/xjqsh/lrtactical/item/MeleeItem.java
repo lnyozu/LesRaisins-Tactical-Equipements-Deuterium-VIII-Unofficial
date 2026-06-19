@@ -10,6 +10,7 @@ import me.xjqsh.lrtactical.api.item.IMeleeWeapon;
 import me.xjqsh.lrtactical.api.melee.MeleeAction;
 import me.xjqsh.lrtactical.client.audio.ICustomSoundSupplier;
 import me.xjqsh.lrtactical.client.renderer.item.MeleeItemRenderer;
+import me.xjqsh.lrtactical.client.tooltip.TooltipSpacer;
 import me.xjqsh.lrtactical.config.CommonConfig;
 import me.xjqsh.lrtactical.item.index.MeleeWeaponIndex;
 import me.xjqsh.lrtactical.item.melee.AttributeData;
@@ -39,6 +40,7 @@ import net.minecraftforge.common.ToolActions;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -46,6 +48,10 @@ import java.util.function.Consumer;
 
 public class MeleeItem extends Item implements IAnimationItem, IMeleeWeapon {
     private static final Style TACZ_STAT_LABEL_STYLE = Style.EMPTY.withColor(0x777777);
+    private static final DecimalFormat TACZ_DAMAGE_PERCENT_FORMAT = new DecimalFormat("#.##%");
+    private static final DecimalFormat TACZ_MOVEMENT_PERCENT_FORMAT = new DecimalFormat("#.#%");
+    private static final double PLAYER_BASE_MOVEMENT_SPEED = 0.1D;
+    private static final double DEFAULT_CRITICAL_DAMAGE_MULTIPLIER = 1.5D;
 
     public MeleeItem() {
         super(new Properties().stacksTo(1).setNoRepair());
@@ -53,10 +59,25 @@ public class MeleeItem extends Item implements IAnimationItem, IMeleeWeapon {
 
     @Override
     public Multimap<Attribute, AttributeModifier> getAttributeModifiers(EquipmentSlot slot, ItemStack stack) {
-        // 返回空以隐藏原版 "When in main hand:" tooltip，伤害由自定义公式计算
-        return ImmutableMultimap.of();
+        if (slot != EquipmentSlot.MAINHAND) {
+            return ImmutableMultimap.of();
+        }
+
+        // 攻击伤害由近战系统自行结算，避免再次叠加玩家原生的 1 点伤害；
+        // 其余配置属性（例如移动速度）仍按正常装备属性生效。
+        ImmutableMultimap.Builder<Attribute, AttributeModifier> builder = ImmutableMultimap.builder();
+        this.getMeleeIndex(stack).ifPresent(index ->
+                index.getDefaultModifiers().entries().stream()
+                        .filter(entry -> entry.getKey() != Attributes.ATTACK_DAMAGE)
+                        .forEach(entry -> builder.put(entry.getKey(), entry.getValue()))
+        );
+        return builder.build();
     }
 
+    @Override
+    public int getDefaultTooltipHideFlags(ItemStack stack) {
+        return super.getDefaultTooltipHideFlags(stack) | ItemStack.TooltipPart.MODIFIERS.getMask();
+    }
 
 
     @Override
@@ -81,12 +102,22 @@ public class MeleeItem extends Item implements IAnimationItem, IMeleeWeapon {
 
     @Override
     public boolean isEnchantable(@NotNull ItemStack pStack) {
-        return true;
+        return CommonConfig.MELEE_ENCHANTING_TABLE_ENABLED.get();
     }
 
     @Override
     public int getEnchantmentValue(ItemStack stack) {
-        return 5;
+        if (!CommonConfig.MELEE_ENCHANTING_TABLE_ENABLED.get()) {
+            return 0;
+        }
+        return this.getMeleeIndex(stack)
+                .map(index -> index.getData().getEnchantmentValue())
+                .orElse(0);
+    }
+
+    @Override
+    public boolean isBookEnchantable(ItemStack stack, ItemStack book) {
+        return CommonConfig.MELEE_ANVIL_ENCHANTING_ENABLED.get();
     }
 
     @NotNull
@@ -219,16 +250,16 @@ public class MeleeItem extends Item implements IAnimationItem, IMeleeWeapon {
                 } else {
                     soundKey = action.getId() + "_hit";
                 }
-                IMeleeWeapon.playMeleeSound(attacker, index.getId(), soundKey, 1.0f, 1.0f, true);
                 IMeleeWeapon.playMeleeSoundToAttacker(attacker, index.getId(),
-                        soundKey + ICustomSoundSupplier.FEEDBACK_SUFFIX, 1.0f, 1.0f);
+                        soundKey + ICustomSoundSupplier.FEEDBACK_SUFFIX, 0.5f, 1.0f);
             }
         });
     }
 
     @Override
     public boolean canApplyAtEnchantingTable(ItemStack stack, Enchantment enchantment) {
-        return enchantment.category == EnchantmentCategory.WEAPON;
+        return CommonConfig.MELEE_ENCHANTING_TABLE_ENABLED.get()
+                && enchantment.category == EnchantmentCategory.WEAPON;
     }
 
     @Override
@@ -253,13 +284,14 @@ public class MeleeItem extends Item implements IAnimationItem, IMeleeWeapon {
 
         boolean showBaseInfo = TooltipHideFlags.shouldShow(stack, GunTooltipPart.BASE_INFO);
         boolean showExtraInfo = TooltipHideFlags.shouldShow(stack, GunTooltipPart.EXTRA_DAMAGE_INFO);
+        int statStart = tooltip.size();
         this.getMeleeIndex(stack).ifPresent(index -> {
             var data = index.getData();
             var combatData = data.getAttackInfo();
             if (combatData == null) return;
 
             if (showBaseInfo) {
-                // TACZ BASE_INFO：伤害、攻速
+                // 基础参数：伤害、攻速、攻击范围
                 data.getRawAttributes().getAttributes().stream()
                         .filter(a -> a.id().getPath().equals("generic.attack_damage"))
                         .findFirst()
@@ -280,21 +312,6 @@ public class MeleeItem extends Item implements IAnimationItem, IMeleeWeapon {
                                     .append(Component.literal(String.format("%.1f", speed))
                                             .withStyle(ChatFormatting.AQUA)));
                         });
-            }
-
-            if (showExtraInfo) {
-                // TACZ EXTRA_DAMAGE_INFO：移速、攻击范围
-                data.getRawAttributes().getAttributes().stream()
-                        .filter(a -> a.id().getPath().equals("generic.movement_speed"))
-                        .findFirst()
-                        .ifPresent(attr -> {
-                            double value = attr.operation() == AttributeModifier.Operation.MULTIPLY_BASE
-                                    ? attr.amount() * 100 : attr.amount();
-                            tooltip.add(Component.translatable("tooltip.lrtactical.melee.move_speed")
-                                    .withStyle(TACZ_STAT_LABEL_STYLE)
-                                    .append(Component.literal(String.format("%+.0f%%", value))
-                                            .withStyle(value >= 0 ? ChatFormatting.AQUA : ChatFormatting.RED)));
-                        });
 
                 combatData.attackInfo.values().stream()
                         .flatMap(List::stream)
@@ -306,13 +323,53 @@ public class MeleeItem extends Item implements IAnimationItem, IMeleeWeapon {
                                         .append(Component.literal(String.format("%.1f", range))
                                                 .withStyle(ChatFormatting.AQUA))));
             }
+
+            if (showExtraInfo) {
+                if (tooltip.size() > statStart) {
+                    tooltip.add(TooltipSpacer.marker());
+                }
+
+                // 对齐 TACZ EXTRA_DAMAGE_INFO：百分比在前，整行使用强调色。
+                double heavyDamageMultiplier = combatData.attackInfo
+                        .getOrDefault(MeleeAction.RIGHT, List.of())
+                        .stream()
+                        .mapToDouble(CombatData.MeleeAttackInfo::getFactor)
+                        .max()
+                        .orElse(1.0D);
+                tooltip.add(Component.translatable(
+                                "tooltip.lrtactical.melee.heavy_damage",
+                                TACZ_DAMAGE_PERCENT_FORMAT.format(heavyDamageMultiplier))
+                        .withStyle(ChatFormatting.GOLD));
+
+                tooltip.add(Component.translatable(
+                                "tooltip.lrtactical.melee.critical_damage",
+                                TACZ_DAMAGE_PERCENT_FORMAT.format(DEFAULT_CRITICAL_DAMAGE_MULTIPLIER))
+                        .withStyle(ChatFormatting.GOLD));
+
+                double movementSpeed = data.getRawAttributes().getAttributes().stream()
+                        .filter(a -> a.id().getPath().equals("generic.movement_speed"))
+                        .findFirst()
+                        .map(attr -> attr.operation() == AttributeModifier.Operation.ADDITION
+                                ? attr.amount() / PLAYER_BASE_MOVEMENT_SPEED
+                                : (double) attr.amount())
+                        .orElse(0.0D);
+                tooltip.add(Component.translatable(
+                                "tooltip.lrtactical.melee.movement_speed",
+                                TACZ_MOVEMENT_PERCENT_FORMAT.format(movementSpeed))
+                        .withStyle(movementSpeed >= 0.0D ? ChatFormatting.AQUA : ChatFormatting.RED));
+            }
         });
+
+        boolean hasStatLines = tooltip.size() > statStart;
 
         // 包来源
         if (TooltipHideFlags.shouldShow(stack, GunTooltipPart.PACK_INFO)
                 && level != null && level.isClientSide()) {
             var packInfo = ClientAssetsManager.INSTANCE.getPackInfo(getId(stack));
             if (packInfo != null) {
+                if (hasStatLines) {
+                    tooltip.add(TooltipSpacer.marker());
+                }
                 tooltip.add(Component.translatable(packInfo.getName())
                         .withStyle(ChatFormatting.DARK_GRAY));
             }

@@ -1,11 +1,15 @@
 package me.xjqsh.lrtactical.entity;
 
-import me.xjqsh.lrtactical.init.ModParticleTypes;
+import me.xjqsh.lrtactical.config.ServerConfig;
+import me.xjqsh.lrtactical.server.smoke.ServerSmokeManager;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.HitResult;
 import net.minecraftforge.network.PlayMessages;
+import org.jetbrains.annotations.Nullable;
 
 public class SmokeGrenadeEntity extends ThrowableItemEntity {
     public static final int SMOKE_START_TIME = 40;
@@ -38,23 +42,27 @@ public class SmokeGrenadeEntity extends ThrowableItemEntity {
     @Override
     public void tick() {
         super.tick();
-        if (this.level().isClientSide()) {
-            if (this.tickCount >= SMOKE_START_TIME) {
-                // 在半球形范围内生成烟雾粒子
-                double x = this.getX();
-                double y = this.getY();
-                double z = this.getZ();
-                for (int i = 0; i < 16; i++) {
-                    double offsetX = this.random.triangle(0, SMOKE_RADIUS);
-                    double offsetY = this.random.triangle(0, SMOKE_HEIGHT);
-                    double offsetZ = this.random.triangle(0, SMOKE_RADIUS);
-                    this.level().addParticle(ModParticleTypes.SMOKE_CLOUD.get(), true, x + offsetX, y + offsetY, z + offsetZ, 0.0D, 0.0D, 0.0D);
-                }
-            }
-        } else {
-            if (tickCount == SMOKE_START_TIME) {
-                playThrowableSound("release", 1.0f, 1.0f);
-            }
+        if (this.isRemoved()) {
+            return;
         }
+        if (!this.level().isClientSide() && tickCount == SMOKE_START_TIME) {
+            int cleanupRemaining = Math.max(0,
+                    ServerConfig.getThrowableForceCleanupTimeTicks() - this.tickCount);
+            int remainingTicks = this.getLife() > 0
+                    ? Math.min(Math.max(0, this.getLife() - this.tickCount), cleanupRemaining)
+                    : cleanupRemaining;
+            if (this.level() instanceof ServerLevel serverLevel) {
+                ServerSmokeManager.register(serverLevel, this.getUUID(), this.position(), remainingTicks);
+            }
+            playThrowableSound("release", 1.0f, 1.0f);
+        }
+    }
+
+    @Override
+    public void onDeath(@Nullable HitResult hitResult) {
+        if (this.level() instanceof ServerLevel serverLevel) {
+            ServerSmokeManager.remove(serverLevel, this.getUUID());
+        }
+        super.onDeath(hitResult);
     }
 }

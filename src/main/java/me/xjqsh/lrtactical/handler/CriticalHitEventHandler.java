@@ -1,6 +1,7 @@
 package me.xjqsh.lrtactical.handler;
 
 import me.xjqsh.lrtactical.EquipmentMod;
+import me.xjqsh.lrtactical.config.CommonConfig;
 import me.xjqsh.lrtactical.init.ModEnchantment;
 import me.xjqsh.lrtactical.util.VectorUtil;
 import net.minecraft.world.entity.Entity;
@@ -17,6 +18,9 @@ public class CriticalHitEventHandler {
 
     @SubscribeEvent(priority = EventPriority.HIGH)
     public static void onCriticalHit(CriticalHitEvent event) {
+        if (!CommonConfig.MELEE_ENCHANTMENT_EFFECTS_ENABLED.get()) {
+            return;
+        }
         Player player = event.getEntity();
         int level = player.getMainHandItem().getEnchantmentLevel(ModEnchantment.BACKSTAB.get());
         if (level > 0) {
