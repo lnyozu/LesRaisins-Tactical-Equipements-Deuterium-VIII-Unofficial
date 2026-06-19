@@ -356,7 +356,7 @@ public class MeleeItem extends Item implements IAnimationItem, IMeleeWeapon {
                 tooltip.add(Component.translatable(
                                 "tooltip.lrtactical.melee.movement_speed",
                                 TACZ_MOVEMENT_PERCENT_FORMAT.format(movementSpeed))
-                        .withStyle(movementSpeed >= 0.0D ? ChatFormatting.AQUA : ChatFormatting.RED));
+                        .withStyle(ChatFormatting.RED));
             }
         });
 
