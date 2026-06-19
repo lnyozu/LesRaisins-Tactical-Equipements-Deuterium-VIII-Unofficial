@@ -14,7 +14,7 @@
 ### 优化调整
 
 1. 优化Tooltip显示：Lore移至物品名称下方，Lore与属性间加入半行间距，属性排版对齐TACZ原版风格，完全兼容TACZ HideFlags。
-2. 附魔效果可靠配置：附魔战斗效果、铁砧附魔、附魔台附魔三项独立开关，新增背刺附魔，铁砧合成保护。
+2. 附魔效果可靠配置：附魔战斗效果、铁砧附魔、附魔台附魔三项独立开关，铁砧合成保护。
 3. 兼容所有LesRaisins官方兼容的近战武器包。
 4. 新增烟雾弹服务端同步、爆炸视觉效果网络包、烟雾内玩家名牌隐藏。
 5. 自带战术道具资源首次启动时自动解压至`tacz/default_melee/`目录，方便用户调整配置。
@@ -26,13 +26,19 @@
 
 ```toml
 [grenade]
+# 爆炸是否破坏方块，默认false
 grenadeExplosionBlockDamage = false
 
 [melee]
+# 近战攻击是否消耗耐久，默认false
 meleeItemConsumeDurability = false
+# 目标受伤无敌tick低于此值时忽略无敌帧，默认20
 meleeIgnoreInvulnerableTickThreshold = 20
+# 附魔战斗效果是否生效（锋利、亡灵杀手等），默认false
 meleeEnchantmentEffectsEnabled = false
+# 铁砧附魔是否可用，默认false
 meleeAnvilEnchantingEnabled = false
+# 附魔台是否可用，默认false
 meleeEnchantingTableEnabled = false
 ```
 
@@ -40,17 +46,20 @@ meleeEnchantingTableEnabled = false
 
 ```toml
 [throwable]
+# 投掷物实体最大存活时间（秒），超时强制清除，不触发爆炸/引信/烟雾效果，默认1800
 throwable_force_cleanup_time_seconds = 1800
 ```
 
 客户端配置(`config/lrtactical-client.toml`)：
 
 ```toml
+# 闪光弹致盲时使用黑色遮罩（默认白色），默认false
 blackFlash = false
+# 爆炸屏幕震动倍率，0.0关闭震动，默认1.0
 explodeScreenShakeMultiplier = 1.0
 ```
 
-三项附魔开关彼此独立：附魔效果控制已有附魔是否参与战斗；铁砧与附魔台开关只控制对应的附魔获取方式。投掷物强制清扫时间不会触发引信、爆炸或烟雾结束效果，默认1800秒（30分钟）。
+> 三项附魔开关彼此独立：附魔效果控制已有附魔是否参与战斗；铁砧与附魔台开关只控制对应的附魔获取方式。
 
 ## TACZ HideFlags兼容
 

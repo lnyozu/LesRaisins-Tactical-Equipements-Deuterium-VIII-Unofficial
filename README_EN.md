@@ -14,7 +14,7 @@ An unofficial fork of [LesRaisins Tactical Equipments](https://github.com/LesRai
 ### Improvements
 
 1. Enhanced tooltip display: Lore moved below the item name, half-line spacing between Lore and stats, stat formatting aligned with vanilla TACZ style, full TACZ HideFlags compatibility.
-2. Reliable enchantment configuration: three independent toggles for enchantment combat effects, anvil enchanting, and enchanting table; new Backstab enchantment; anvil merge protection.
+2. Reliable enchantment configuration: three independent toggles for enchantment combat effects, anvil enchanting, and enchanting table; anvil merge protection.
 3. `IMeleeWeapon` interface compatibility with all LesRaisins officially compatible melee weapon packs.
 4. Server-side smoke synchronization, explosion visual effects networking, and player name tag hiding inside smoke.
 5. Bundled tactical equipment resources auto-extract to `tacz/default_melee/` on first launch for easy customization.
@@ -26,13 +26,19 @@ Common configuration (`config/lrtactical.toml`):
 
 ```toml
 [grenade]
+# Whether grenade explosions destroy blocks, default false
 grenadeExplosionBlockDamage = false
 
 [melee]
+# Whether melee attacks consume durability, default false
 meleeItemConsumeDurability = false
+# Ignore invulnerable ticks when below this threshold, default 20
 meleeIgnoreInvulnerableTickThreshold = 20
+# Whether enchantment combat effects apply (Sharpness, Smite, etc.), default false
 meleeEnchantmentEffectsEnabled = false
+# Whether anvil enchanting is available, default false
 meleeAnvilEnchantingEnabled = false
+# Whether enchanting table is available, default false
 meleeEnchantingTableEnabled = false
 ```
 
@@ -40,17 +46,20 @@ Per-world server configuration (`<world>/serverconfig/lrtactical-server.toml`):
 
 ```toml
 [throwable]
+# Max throwable entity lifetime in seconds, silently removed without triggering fuse/explosion/smoke, default 1800
 throwable_force_cleanup_time_seconds = 1800
 ```
 
 Client configuration (`config/lrtactical-client.toml`):
 
 ```toml
+# Use black overlay instead of white when blinded by flashbang, default false
 blackFlash = false
+# Explosion screen shake multiplier, 0.0 to disable, default 1.0
 explodeScreenShakeMultiplier = 1.0
 ```
 
-The three enchantment switches are independent: enchantment effects control whether existing enchantments affect combat, while the anvil and enchanting-table switches only control their respective acquisition methods. Forced throwable cleanup is silent and never triggers a fuse, explosion, or smoke-end effect (default: 1800 seconds / 30 minutes).
+> The three enchantment switches are independent: enchantment effects control whether existing enchantments affect combat, while the anvil and enchanting-table switches only control their respective acquisition methods.
 
 ## TACZ HideFlags Compatibility
 
