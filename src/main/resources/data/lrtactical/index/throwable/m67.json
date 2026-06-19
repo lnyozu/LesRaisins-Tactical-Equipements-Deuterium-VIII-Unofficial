@@ -1,0 +1,62 @@
+{
+  "type": "lrtactical:explode",
+  "name": "item.lrtactical.m67",
+  "tooltip": [
+    "&#95a39c拉&#9da88f环&#a5ad82、&#adb275投&#b5b768掷&#bd9d5e、&#c58354寻&#cd694a找&#d54f40掩&#dd3536体&#e51b2c。"
+  ],
+  "data": {
+    // 投掷物物品通用参数
+    // 准备时间（tick）
+    "prepare_time": 16,
+    // 是否可以温雷，准备时间后继续按住右键将会消耗实体本身的lifetime
+    // 如果lifetime也耗尽，会直接在脚底下爆炸
+    "cookable": true,
+    // 出手速度
+    "initial_speed": 1.1,
+    // 冷却（tick）
+    "cooldown": 40,
+    // 冷却标签，同标签的物品共享cd
+    "cooldown_category": "lrtactical:grenade",
+    // 收起时间（ms）
+    "put_away_time": 380,
+    // 最大堆叠数量
+    "stack_size": 3,
+    // 投掷物实体参数
+    "entity" : {
+      // 最大存活时长
+      "life_time": 75,
+      // 重力
+      "gravity": 0.07,
+      // 弹射物撞到实体时造成的撞击伤害
+      "hit_damage": 1.0,
+      // 是否反弹，如果false碰到方块会直接执行生命周期结束方法（比如手雷是爆炸）
+      "should_bounce": true,
+      // 砸到地板时是否会破碎，在should_bounce开启的情况下也有效，用于燃烧弹等你不希望在墙上炸开的场合
+      "broke_on_ground": false,
+      // 反弹系数，0.7表示反弹后速度为原来的70%，直接撞击的方向损失量会是1.5倍，如果是地面则会是2.5
+      "bounce_factor": 0.7,
+      // 尾迹粒子，null表示不生成，默认为minecraft:smoke
+      "tail_particles": "minecraft:smoke"
+    },
+    // 爆炸参数，lrtactical:explode类型的投掷物的额外参数
+    "explode": {
+      // 爆炸半径
+      "radius": 5.5,
+      // 爆心伤害
+      "damage": 28.0,
+      // 是否炸毁方块
+      "destroy_blocks": false,
+      // 额外的方块破坏威力乘数，默认1.0
+      "destroy_multiplier": 1.0,
+      // 屏幕抖动的强度会依据爆心到玩家的距离和时间进行衰减
+      // 屏幕抖动时间系数
+      "screen_shake_time": 20.0,
+      // 屏幕抖动强度系数
+      "screen_shake_amplitude": 65.0,
+      // 是否在受到爆炸伤害时触发自身的爆炸效果
+      "trigger_on_explode": false,
+      // 遥控起爆，注意堆叠上限应该为1，否则遥控器会覆盖剩余的物品
+      "remote_detonation": false
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "item.lrtactical.condensed_milk",
+  "base_item": "lrtactical:consumable",
+  "tooltip": [
+    "&#fff0a8甜&#ffe698蜜&#ffdc88补&#ffd278给&#ffc868，&#e8cb72填&#d1ce7c饱&#bad186肚&#a3d490子&#8cd79a。"
+  ],
+  "data": {
+    // 使用时长
+    "use_duration": 109,
+    // 冷却
+    "cooldown": 60,
+    // 冷却种类
+    "cooldown_category": "lrtactical:food",
+    // 堆叠上限
+    "stack_size": 4,
+    // 切入时间（tick）
+    "draw_time": 10,
+    // 切出时间（tick）
+    "put_away_time": 6,
+    // 饥饿恢复
+    "food": 6,
+    // 饱食度
+    "saturation": 1.6,
+    "effects": [
+      {
+        "id": "minecraft:saturation",
+        "duration": 40,
+        "amplifier": 0,
+        "chance": 1.0
+      }
+    ],
+    // 是否需要长按
+    // hold（默认）和原版一样得一直按着
+    // toggle右键后会保持使用，直到读完条或者再次右键取消
+    "use_mode": "toggle"
+  }
+}

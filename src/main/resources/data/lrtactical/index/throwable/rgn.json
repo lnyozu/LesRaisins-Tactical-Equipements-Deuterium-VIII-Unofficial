@@ -1,0 +1,27 @@
+{
+  "type": "lrtactical:explode",
+  "name": "item.lrtactical.rgn",
+  "tooltip": [
+    "&#ffb24a触&#ffa13f地&#ff9034即&#ff7f29爆&#ff6e1e，&#ee5d2a拒&#dd4c36绝&#cc3b42犹&#bb2a4e豫&#aa195a。"
+  ],
+  "data": {
+    "prepare_time": 16,
+    "initial_speed": 1.1,
+    "cooldown": 40,
+    "cooldown_category": "lrtactical:grenade",
+    "put_away_time": 380,
+    "stack_size": 3,
+    "entity" : {
+      "life_time": 100,
+      "gravity": 0.07,
+      "should_bounce": false,
+      "bounce_factor": 0.7
+    },
+    "explode": {
+      "radius": 5.5,
+      "damage": 24.0,
+      "screen_shake_time": 20.0,
+      "screen_shake_amplitude": 60.0
+    }
+  }
+}

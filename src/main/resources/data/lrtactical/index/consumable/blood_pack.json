@@ -1,0 +1,47 @@
+{
+  "name": "item.lrtactical.blood_pack",
+  "base_item": "lrtactical:consumable",
+  "tooltip": [
+    "&#ff6b6b快&#f85f67速&#f15363止&#ea475f血&#e33b5b，&#cf526a重&#bb6979返&#a78088战&#939797斗&#7faea6。"
+  ],
+  "data": {
+    // 使用时长
+    "use_duration": 93,
+    // 冷却
+    "cooldown": 80,
+    // 冷却种类
+    "cooldown_category": "lrtactical:medical",
+    // 堆叠上限
+    "stack_size": 2,
+    // 最大耐久，填0表示使用后按数量消耗；大于0时堆叠上限固定为1
+    "max_durability": 0,
+    // 每次使用完成后的耐久消耗
+    "durability_damage": 1,
+    // 切入时间（tick）
+    "draw_time": 5,
+    // 切出时间（tick）
+    "put_away_time": 8,
+    // 治疗量
+    "heal": 8.0,
+    // 饥饿恢复
+    "food": 4,
+    // 饱食度
+    "saturation": 0.6,
+    // 是否需要长按
+    // hold（默认）和原版一样得一直按着
+    // toggle右键后会保持使用，直到读完条或者再次右键取消
+    "use_mode": "toggle",
+    "effects": [
+      {
+        "id": "minecraft:regeneration",
+        "duration": 100,
+        "amplifier": 0,
+        "chance": 1.0
+      }
+    ],
+    // 移除指定效果，或使用分类选择器：@beneficial / @harmful / @neutral
+    "remove_effects": [
+      "@harmful"
+    ]
+  }
+}

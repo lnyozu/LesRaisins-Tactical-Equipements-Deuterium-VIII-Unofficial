@@ -1,0 +1,21 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "me.xjqsh.lrtactical.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "refmap": "lrtactical.refmap.json",
+  "mixins": [
+    "common.AnvilMenuMixin",
+    "common.LivingEntityMixin",
+    "common.PlayerMixin"
+  ],
+  "client": [
+    "client.CreativeModeInventoryScreenMixin", "client.CreativeModeTabsAccessor",
+    "client.GameRendererMixin",
+    "client.GunSmithTableScreenMixin", "client.MinecraftMixin",
+    "client.PlayerAnimatorAssetManagerMixin", "client.PlayerModelMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

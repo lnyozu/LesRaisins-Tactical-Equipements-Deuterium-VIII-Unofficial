@@ -1,0 +1,23 @@
+{
+  "type": "lrtactical:smoke",
+  "name": "item.lrtactical.smoke_grenade",
+  "tooltip": [
+    "&#c7d2cf以&#b8c7c4烟&#a9bcb9幕&#9ab1ae切&#8ba6a3断&#7c9b98视&#6d908d线&#5e8582。"
+  ],
+  "data": {
+    "prepare_time": 16,
+    "initial_speed": 1.1,
+    "cooldown": 40,
+    "cooldown_category": "lrtactical:grenade",
+    "put_away_time": 380,
+    "stack_size": 2,
+    "entity" : {
+      "life_time": 600,
+      "gravity": 0.07,
+      "should_bounce": true,
+      "bounce_factor": 0.7,
+      "hit_damage": 1.0,
+      "tail_particles": "minecraft:cloud"
+    }
+  }
+}

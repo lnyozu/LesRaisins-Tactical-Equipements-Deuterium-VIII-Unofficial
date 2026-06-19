@@ -1,0 +1,141 @@
+{
+  "name": "item.lrtactical.dagger",
+  "tooltip": [
+    "&#d7e3eb迅&#bfcfdd捷&#a7bbcf而&#8fa7c1致&#7793b3命&#5f7fa5。"
+  ],
+  "type": "lrtactical:normal",
+  "base_item": "lrtactical:melee",
+  "data": {
+    "attributes": {
+      "generic.attack_damage": 6,
+      "minecraft:generic.movement_speed": {
+        "amount": 0.05,
+        "operation": "percent"
+      }
+    },
+    // tick
+    "draw_time": 10,
+    // tick
+    "put_away_time": 6,
+    // 最大耐久，填0表示无限耐久
+    "max_durability": 384,
+    // 附魔能力，附魔能力越高，魔咒的质量就越好
+    // 作为参考，原版的石/钻石/铁/木/下界合金/金 制工具的附魔能力为 5/10/14/15/15/22
+    "enchantment_value": 14,
+    "attack": {
+      // 每个攻击动作均可接受一个元素或者一个数组，如果是数组每次进行动作会在列表中循环
+      "attack_left": {
+        // 伤害倍率
+        "factor": 1,
+        // 击退
+        "knockback": 0.05,
+        // 攻击冷却(tick)
+        "cooldown": 12,
+        // 延迟出伤(tick)
+        "delay": 0,
+        // 判定类型
+        "hitbox": {
+          // 圆锥区域
+          "type": "cone",
+          // 最大距离
+          "max_range": 3.5,
+          // 角度
+          "max_angle": 40,
+          // 排除自己
+          "exclude_self": true
+        },
+        // 如果攻击到实体的耐久度消耗
+        "durability_damage": 1
+      },
+//      "attack_left": [
+//        {
+//          // 伤害倍率
+//          "factor": 1,
+//          // 击退
+//          "knockback": 0.05,
+//          // 攻击冷却(tick)
+//          "cooldown": 12,
+//          // 延迟出伤(tick)
+//          "delay": 0,
+//          // 判定类型
+//          "hitbox": {
+//            // 圆锥区域
+//            "type": "cone",
+//            // 最大距离
+//            "max_range": 3.5,
+//            // 角度
+//            "max_angle": 40,
+//            // 排除自己
+//            "exclude_self": true
+//          },
+//          // 如果攻击到实体的耐久度消耗
+//          "durability_damage": 1
+//        },
+//        {
+//          // 伤害倍率
+//          "factor": 0.5,
+//          // 击退
+//          "knockback": 0.05,
+//          // 攻击冷却(tick)
+//          "cooldown": 4,
+//          // 延迟出伤(tick)
+//          "delay": 0,
+//          // 判定类型
+//          "hitbox": {
+//            // 圆锥区域
+//            "type": "cone",
+//            // 最大距离
+//            "max_range": 3.5,
+//            // 角度
+//            "max_angle": 40,
+//            // 排除自己
+//            "exclude_self": true
+//          },
+//          // 如果攻击到实体的耐久度消耗
+//          "durability_damage": 1
+//        }
+//      ],
+      "attack_right": {
+        // 伤害倍率
+        "factor": 1.5,
+        // 击退
+        "knockback": 0.1,
+        // 攻击冷却(tick)
+        "cooldown": 26,
+        // 延迟出伤(tick)
+        "delay": 2,
+        // 判定类型
+        "hitbox": {
+          // 圆锥区域
+          "type": "cone",
+          // 最大距离
+          "max_range": 3.5,
+          // 角度
+          "max_angle": 85,
+          // 排除自己
+          "exclude_self": true
+        }
+        // 突进
+//        "movement": {
+//          "delay": 0,
+//          "speed": 0.5
+//        }
+        // 另外一种示例
+//        "hitbox": {
+//          // obb区域，以玩家视线位置为起点延伸
+//          "type": "obb",
+//          // 最大距离（深度）
+//          "max_range": 4,
+//          // x轴方向的半长
+//          "half_width": 0.5,
+//          // y轴方向的半长
+//          "half_height": 0.5,
+//          // 旋转
+//          "roll": 0,
+//          // 排除自己
+//          "exclude_self": true
+//        }
+      }
+    }
+  }
+}
