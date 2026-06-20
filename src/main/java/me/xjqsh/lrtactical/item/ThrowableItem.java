@@ -7,13 +7,14 @@ import com.tacz.guns.item.GunTooltipPart;
 import me.xjqsh.lrtactical.api.item.IThrowable;
 import me.xjqsh.lrtactical.capability.CustomItemCoolDownsProvider;
 import me.xjqsh.lrtactical.client.renderer.item.ThrowableItemRendererWrapper;
-import me.xjqsh.lrtactical.entity.SmokeGrenadeEntity;
+import me.xjqsh.lrtactical.config.ServerConfig;
 import me.xjqsh.lrtactical.init.ModItems;
 import me.xjqsh.lrtactical.item.index.ThrowableIndex;
 import me.xjqsh.lrtactical.item.throwable.area.EffectCloudThrowableData;
 import me.xjqsh.lrtactical.item.throwable.explode.ExplodeThrowableData;
 import me.xjqsh.lrtactical.item.throwable.flash.StunThrowableData;
 import me.xjqsh.lrtactical.item.throwable.smoke.SmokeType;
+import me.xjqsh.lrtactical.server.c4.C4ServerManager;
 import me.xjqsh.lrtactical.util.TooltipHideFlags;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
@@ -29,6 +30,8 @@ import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.item.alchemy.PotionUtils;
 import net.minecraft.world.level.Level;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.extensions.common.IClientItemExtensions;
@@ -110,26 +113,39 @@ public class ThrowableItem extends Item implements IAnimationItem, IThrowable {
         return InteractionResultHolder.consume(stack);
     }
 
-    public void onThrow(Level world, LivingEntity entity, ItemStack stack, ThrowableIndex<?, ?> index) {
+    public boolean onThrow(Level world, LivingEntity entity, ItemStack stack, ThrowableIndex<?, ?> index) {
+        boolean remoteCharge = index.getData() instanceof ExplodeThrowableData explode
+                && explode.getExplode().isRemoteDetonation();
+        if (remoteCharge
+                && entity instanceof ServerPlayer player
+                && world instanceof ServerLevel serverLevel
+                && !C4ServerManager.canDeploy(serverLevel, player.getUUID())) {
+            int count = C4ServerManager.getDeployedCount(serverLevel, player.getUUID());
+            player.sendSystemMessage(Component.translatable(
+                    "message.lrtactical.c4.limit",
+                    count,
+                    ServerConfig.getRemoteChargeMaxPerPlayer()
+            ).withStyle(ChatFormatting.RED), true);
+            return false;
+        }
+
         var throwable = index.createEntity(stack, entity);
         if (index.getData().isCookable()) {
             int newLife = throwable.getLife() - (entity.getTicksUsingItem() - index.getData().getPrepareTime());
             newLife = Math.max(newLife, 0);
             throwable.setLife(newLife);
         }
-        world.addFreshEntity(throwable);
-
-        ResourceLocation id = index.getData().getCooldownCategory();
-        if (id != null && !(entity instanceof Player player && player.isCreative())) {
-            entity.getCapability(CustomItemCoolDownsProvider.CAPABILITY).ifPresent(cap -> {
-                cap.addCooldown(id, index.getData().getCooldown());
-            });
+        if (!world.addFreshEntity(throwable)) {
+            return false;
         }
-        if (!(entity instanceof Player player && player.isCreative())) {
-            stack.shrink(1);
+        if (throwable instanceof me.xjqsh.lrtactical.entity.GrenadeEntity grenade
+                && grenade.isRemoteDetonation()) {
+            C4ServerManager.register(grenade);
         }
 
-        if (index.getData() instanceof ExplodeThrowableData explode && explode.getExplode().isRemoteDetonation()) {
+        finishThrowableUse(entity, stack, index);
+
+        if (remoteCharge) {
             ItemStack detonatorStack = new ItemStack(ModItems.DETONATOR.get());
             if (detonatorStack.getItem() instanceof DetonatorItem detonatorItem) {
                 detonatorItem.recordEntity(throwable, detonatorStack);
@@ -137,18 +153,49 @@ public class ThrowableItem extends Item implements IAnimationItem, IThrowable {
             entity.setItemInHand(InteractionHand.MAIN_HAND, detonatorStack);
         }
 
+        return true;
     }
 
+    private void detonateCookedThrowableInHand(LivingEntity entity, ItemStack stack, ThrowableIndex<?, ?> index) {
+        var throwable = index.createEntity(stack, entity);
+        throwable.setDeltaMovement(0.0D, 0.0D, 0.0D);
+        throwable.setPos(entity.getX(), entity.getEyeY() - 0.1D, entity.getZ());
+        finishThrowableUse(entity, stack, index);
+        throwable.onDeath(null);
+    }
+
+    private void finishThrowableUse(LivingEntity entity, ItemStack stack, ThrowableIndex<?, ?> index) {
+        ResourceLocation id = index.getData().getCooldownCategory();
+        if (id != null && !isCreative(entity)) {
+            entity.getCapability(CustomItemCoolDownsProvider.CAPABILITY).ifPresent(cap -> {
+                cap.addCooldown(id, index.getData().getCooldown());
+            });
+        }
+        if (!isCreative(entity)) {
+            stack.shrink(1);
+        }
+    }
+
+    private static boolean isCreative(LivingEntity entity) {
+        return entity instanceof Player player && player.isCreative();
+    }
+
+    private static boolean hasCookedPastFuse(LivingEntity entity, ThrowableIndex<?, ?> index) {
+        var data = index.getData();
+        int lifeTime = data.getEntityData().getLifeTime();
+        return data.isCookable()
+                && lifeTime > 0
+                && entity.getTicksUsingItem() >= data.getPrepareTime() + lifeTime;
+    }
 
     @ParametersAreNonnullByDefault
     @Override
     public void onUseTick(Level world, LivingEntity entity, ItemStack stack, int pRemainingUseDuration) {
         this.getThrowableIndex(stack).ifPresent(index ->{
-            var data = index.getData();
-            if (data.isCookable() && entity.getTicksUsingItem() >= data.getPrepareTime() + data.getEntityData().getLifeTime()) {
+            if (hasCookedPastFuse(entity, index)) {
                 if (!world.isClientSide()) {
-                    onThrow(world, entity, stack, index);
                     entity.stopUsingItem();
+                    detonateCookedThrowableInHand(entity, stack, index);
                 }
             }
         });
@@ -160,7 +207,11 @@ public class ThrowableItem extends Item implements IAnimationItem, IThrowable {
         this.getThrowableIndex(stack).ifPresent(index ->{
             if (entity.getTicksUsingItem() >= index.getData().getPrepareTime()) {
                 if (!world.isClientSide()) {
-                    onThrow(world, entity, stack, index);
+                    if (hasCookedPastFuse(entity, index)) {
+                        detonateCookedThrowableInHand(entity, stack, index);
+                    } else {
+                        onThrow(world, entity, stack, index);
+                    }
                 }
             }
         });
@@ -237,13 +288,15 @@ public class ThrowableItem extends Item implements IAnimationItem, IThrowable {
                 }
             } else if (index.getType() == SmokeType.SMOKE) {
                 int duration = Math.max(0,
-                        data.getEntityData().getLifeTime() - SmokeGrenadeEntity.SMOKE_START_TIME);
+                        ServerConfig.adjustSmokeLifetimeTicks(
+                                data.getEntityData().getLifeTime()
+                        ) - ServerConfig.getSmokeStartDelayTicks());
                 if (showBaseInfo) {
                     addDuration(pTooltipComponents, duration);
                 }
                 if (showExtraInfo) {
                     addStat(pTooltipComponents, "tooltip.lrtactical.throwable.range",
-                            formatNumber(SmokeGrenadeEntity.SMOKE_RADIUS));
+                            formatNumber(ServerConfig.getSmokeRadius()));
                 }
             }
         });

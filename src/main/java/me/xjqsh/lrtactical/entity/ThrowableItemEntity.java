@@ -50,16 +50,19 @@ public abstract class ThrowableItemEntity extends Projectile implements IEntityA
     private boolean brokeOnGround = false;
     private float hitDamage = 1.0f;
     private ParticleOptions tailParticle = null;
+    private long createdGameTime;
 
     public ThrowableItemEntity(EntityType<? extends Projectile> type, LivingEntity shooter, Level level, int lifeTime) {
         super(type, level);
         this.setPos(shooter.getX(), shooter.getEyeY() - 0.1, shooter.getZ());
         this.setOwner(shooter);
         this.life = lifeTime;
+        this.createdGameTime = level.getGameTime();
     }
 
     public ThrowableItemEntity(EntityType<? extends Projectile> type, Level level) {
         super(type, level);
+        this.createdGameTime = level.getGameTime();
     }
 
     @NotNull
@@ -78,13 +81,47 @@ public abstract class ThrowableItemEntity extends Projectile implements IEntityA
         if (!itemstack.isEmpty()) {
             pCompound.put("Item", itemstack.save(new CompoundTag()));
         }
-
+        pCompound.putInt("Life", this.life);
+        pCompound.putFloat("Gravity", this.gravity);
+        pCompound.putDouble("BounceFactor", this.bounceFactor);
+        pCompound.putBoolean("ShouldBounce", this.shouldBounce);
+        pCompound.putBoolean("BrokeOnGround", this.brokeOnGround);
+        pCompound.putFloat("HitDamage", this.hitDamage);
+        pCompound.putInt("EntityAge", this.tickCount);
+        pCompound.putLong("CreatedGameTime", this.createdGameTime);
     }
 
     public void readAdditionalSaveData(@NotNull CompoundTag pCompound) {
         super.readAdditionalSaveData(pCompound);
         ItemStack itemstack = ItemStack.of(pCompound.getCompound("Item"));
         this.setItem(itemstack);
+        if (pCompound.contains("Life")) {
+            this.life = pCompound.getInt("Life");
+        }
+        if (pCompound.contains("Gravity")) {
+            this.gravity = pCompound.getFloat("Gravity");
+        }
+        if (pCompound.contains("BounceFactor")) {
+            this.bounceFactor = pCompound.getDouble("BounceFactor");
+        }
+        if (pCompound.contains("ShouldBounce")) {
+            this.shouldBounce = pCompound.getBoolean("ShouldBounce");
+        }
+        if (pCompound.contains("BrokeOnGround")) {
+            this.brokeOnGround = pCompound.getBoolean("BrokeOnGround");
+        }
+        if (pCompound.contains("HitDamage")) {
+            this.hitDamage = pCompound.getFloat("HitDamage");
+        }
+        if (pCompound.contains("EntityAge")) {
+            this.tickCount = Math.max(0, pCompound.getInt("EntityAge"));
+        }
+        if (pCompound.contains("CreatedGameTime")) {
+            this.createdGameTime = pCompound.getLong("CreatedGameTime");
+        } else {
+            // Compatibility with charges saved before absolute cleanup timing existed.
+            this.createdGameTime = Math.max(0L, this.level().getGameTime() - this.tickCount);
+        }
     }
 
     protected ItemStack getItemRaw() {
@@ -272,9 +309,16 @@ public abstract class ThrowableItemEntity extends Projectile implements IEntityA
     @Override
     public void tick() {
         super.tick();
+        int cleanupTime = this.getForceCleanupTimeTicks();
         if (!this.level().isClientSide()
-                && this.tickCount >= ServerConfig.getThrowableForceCleanupTimeTicks()) {
+                && cleanupTime > 0
+                && this.getCleanupAgeTicks() >= cleanupTime) {
             this.discard();
+            return;
+        }
+
+        if (!this.shouldTickThrowableMotion()) {
+            this.tickLifetimeAndTail();
             return;
         }
 
@@ -309,10 +353,29 @@ public abstract class ThrowableItemEntity extends Projectile implements IEntityA
 
         this.setPos(x, y, z);
 
-        if (this.tickCount >= life && life > 0) {
-            if (!this.level().isClientSide()) {
-                this.onDeath(null);
-            }
+        this.tickLifetimeAndTail();
+    }
+
+    protected boolean shouldTickThrowableMotion() {
+        return true;
+    }
+
+    protected int getForceCleanupTimeTicks() {
+        return ServerConfig.getThrowableForceCleanupTimeTicks();
+    }
+
+    protected long getCleanupAgeTicks() {
+        long elapsedGameTime = Math.max(0L, this.level().getGameTime() - this.createdGameTime);
+        return Math.max(this.tickCount, elapsedGameTime);
+    }
+
+    public long getCreatedGameTime() {
+        return this.createdGameTime;
+    }
+
+    private void tickLifetimeAndTail() {
+        if (this.tickCount >= life && life > 0 && !this.level().isClientSide()) {
+            this.onDeath(null);
         }
 
         if (this.level().isClientSide()) {

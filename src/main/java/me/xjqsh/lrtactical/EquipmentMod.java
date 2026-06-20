@@ -22,7 +22,11 @@ public class EquipmentMod {
     public EquipmentMod() {
         ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, ClientConfig.init());
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, CommonConfig.init());
-        ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, ServerConfig.init());
+        ModLoadingContext.get().registerConfig(
+                ModConfig.Type.COMMON,
+                ServerConfig.init(),
+                ServerConfig.FILE_NAME
+        );
 
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
 
@@ -38,7 +42,7 @@ public class EquipmentMod {
 
         NetworkHandler.init();
 
-        // 首次启动时自动解压默认资源到 tacz/default_melee/
+        // 首次启动时自动解压默认资源到 tacz/lrtactical_official_resources/
         DefaultPackExtractor.extractIfNeeded();
     }
 

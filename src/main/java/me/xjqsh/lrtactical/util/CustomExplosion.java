@@ -3,11 +3,12 @@ package me.xjqsh.lrtactical.util;
 import com.google.common.collect.Sets;
 import me.xjqsh.lrtactical.network.NetworkHandler;
 import me.xjqsh.lrtactical.network.message.SShakeScreenMessage;
+import me.xjqsh.lrtactical.server.smoke.ServerSmokeManager;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.item.PrimedTnt;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.level.Explosion;
 import net.minecraft.world.level.ExplosionDamageCalculator;
@@ -156,28 +157,28 @@ public class CustomExplosion extends Explosion {
             if (!entity.ignoreExplosion()) {
                 double distanceRate = Math.sqrt(entity.distanceToSqr(position)) / (double) diameter;
                 if (distanceRate <= 1.0D) {
-                    double xDistance = entity.getX() - this.x;
-                    double yDistance = (entity instanceof PrimedTnt ? entity.getY() : entity.getEyeY()) - this.y;
-                    double zDistance = entity.getZ() - this.z;
-                    double distance = Math.sqrt(xDistance * xDistance + yDistance * yDistance + zDistance * zDistance);
+                    double seenPercent = Mth.clamp(getSeenPercent(position, entity), 0.01, Double.POSITIVE_INFINITY);
+                    double damagePercent = (1.0D - distanceRate) * seenPercent;
+                    double damageFinal = (damagePercent * damagePercent + damagePercent) * damage / 2.0;
 
-                    if (distance != 0.0D) {
-                        double seenPercent = Mth.clamp(getSeenPercent(position, entity), 0.01, Double.POSITIVE_INFINITY);
-                        double damagePercent = (1.0D - distanceRate) * seenPercent;
-                        double damageFinal = (damagePercent * damagePercent + damagePercent) * damage / 2.0;
+                    if (entity instanceof Monster monster) {
+                        monster.hurt(this.damageSource, (float) damageFinal * (1 + 0.2f * this.damageMultiplier));
+                    } else {
+                        entity.hurt(this.damageSource, (float) damageFinal);
+                    }
 
-                        if (entity instanceof Monster monster) {
-                            monster.hurt(this.damageSource, (float) damageFinal * (1 + 0.2f * this.damageMultiplier));
-                        } else {
-                            entity.hurt (this.damageSource, (float) damageFinal);
-                        }
-
-                        if (fireTime > 0) {
-                            entity.setSecondsOnFire(fireTime);
-                        }
+                    if (fireTime > 0) {
+                        entity.setSecondsOnFire(fireTime);
                     }
                 }
             }
+        }
+        if (this.level instanceof ServerLevel serverLevel) {
+            ServerSmokeManager.disperseByExplosion(
+                    serverLevel,
+                    position,
+                    this.radius
+            );
         }
     }
 }

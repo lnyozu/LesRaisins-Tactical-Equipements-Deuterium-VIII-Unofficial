@@ -1,5 +1,5 @@
 {
-  // 粘性炸弹，此类型未完全完成
+  // 可持久化的遥控粘性炸弹
   "type": "lrtactical:sticky",
   "name": "item.lrtactical.c4",
   "tooltip": [

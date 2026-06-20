@@ -29,6 +29,7 @@ public class ExplodeType {
         entity.setDestroyBlocks(data.getExplode().isDestroyBlocks());
         entity.setExplodeDestroyMultiplier(data.getExplode().getDestroyMultiplier());
         entity.setTriggerOnExplode(data.getExplode().isTriggerOnExplode());
+        entity.setRemoteDetonation(data.getExplode().isRemoteDetonation());
         entity.setScreenShakeTime(data.getExplode().getScreenShakeTime());
         entity.setScreenShakeAmplitude(data.getExplode().getScreenShakeAmplitude());
 

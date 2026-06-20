@@ -11,6 +11,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.item.alchemy.PotionUtils;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
@@ -61,7 +62,7 @@ public class EffectCloudGrenadeEntity extends ThrowableItemEntity {
                 Entity target = hitResult instanceof EntityHitResult entityHitResult ? entityHitResult.getEntity() : null;
                 int color = PotionUtils.getColor(effects);
 
-                applySplash(effects, cloudData.isIgnite(), cloudData.getIgniteTime(), target, cloudData.getRadius());
+                applySplash(effects, cloudData.isIgnite(), cloudData.getIgniteTime(), target, cloudData.getRadius(), pos);
                 NetworkHandler.sendToNearbyPlayers(
                         new SSplashParticle(this.blockPosition(), color), this.level(), pos, 64
                 );
@@ -91,22 +92,24 @@ public class EffectCloudGrenadeEntity extends ThrowableItemEntity {
     }
 
     public void applySplash(List<MobEffectInstance> effectInstances, boolean ignite, int igniteTime,
-                            @Nullable Entity target, double radius) {
-        if (effectInstances.isEmpty() || radius <= 0.0D) return;
-        AABB area = this.getBoundingBox().inflate(radius, 2.0D, radius);
+                            @Nullable Entity target, double radius, Vec3 sourcePos) {
+        if ((effectInstances.isEmpty() && !ignite) || radius <= 0.0D) return;
+        AABB area = new AABB(sourcePos, sourcePos).inflate(radius, 2.0D, radius);
         List<LivingEntity> entities = this.level().getEntitiesOfClass(LivingEntity.class, area);
 
         if (!entities.isEmpty()) {
             Entity source = this.getEffectSource();
+            double radiusSqr = radius * radius;
 
             for (LivingEntity entity : entities) {
-                if (!entity.isAffectedByPotions()) {
-                    continue;
-                }
-                double distanceSqr = this.distanceToSqr(entity);
-                if (distanceSqr < 16.0D) {
+                double distanceSqr = sourcePos.distanceToSqr(entity.position());
+                if (distanceSqr < radiusSqr && hasEffectLineOfSight(sourcePos, entity)) {
                     double d = (entity == target) ? 1.0D : 1.0D - Math.sqrt(distanceSqr) / radius;
-                    applyAllEffects(effectInstances, entity, d, source, ignite, igniteTime);
+                    if (!effectInstances.isEmpty() && entity.isAffectedByPotions()) {
+                        applyAllEffects(effectInstances, entity, d, source, ignite, igniteTime);
+                    } else if (ignite && !entity.fireImmune()) {
+                        entity.setSecondsOnFire(igniteTime);
+                    }
                 }
             }
         }
@@ -137,6 +140,27 @@ public class EffectCloudGrenadeEntity extends ThrowableItemEntity {
         if (ignite && !entity.fireImmune()) {
             entity.setSecondsOnFire(igniteTime);
         }
+    }
+
+    private boolean hasEffectLineOfSight(Vec3 sourcePos, LivingEntity entity) {
+        Vec3 source = sourcePos.add(0.0D, 0.1D, 0.0D);
+        Vec3 feet = entity.position().add(0.0D, 0.1D, 0.0D);
+        Vec3 body = entity.position().add(0.0D, entity.getBbHeight() * 0.5D, 0.0D);
+
+        return hasClearClip(source, feet)
+                || hasClearClip(source, body);
+    }
+
+    private boolean hasClearClip(Vec3 source, Vec3 target) {
+        HitResult result = this.level().clip(new ClipContext(
+                source,
+                target,
+                ClipContext.Block.COLLIDER,
+                ClipContext.Fluid.NONE,
+                this
+        ));
+        return result.getType() == HitResult.Type.MISS
+                || result.getLocation().distanceToSqr(target) < 0.04D;
     }
 
     public EffectCloudThrowableData.CloudData getCloudData() {

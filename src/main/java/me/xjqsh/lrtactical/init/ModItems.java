@@ -18,7 +18,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.minecraftforge.fml.common.Mod;
@@ -68,11 +67,14 @@ public class ModItems {
     public static RegistryObject<MeleeItem> MELEE = ITEMS.register("melee", MeleeItem::new);
     public static RegistryObject<FlashShieldItem> FLASH_SHIELD = ITEMS.register("flash_shield", FlashShieldItem::new);
     public static RegistryObject<DetonatorItem> DETONATOR = ITEMS.register("detonator", DetonatorItem::new);
+    public static RegistryObject<Item> THROWABLE_TAB_ICON = ITEMS.register("throwable_tab_icon", () -> new Item(new Item.Properties()));
+    public static RegistryObject<Item> CONSUMABLE_TAB_ICON = ITEMS.register("consumable_tab_icon", () -> new Item(new Item.Properties()));
+    public static RegistryObject<Item> MELEE_TAB_ICON = ITEMS.register("melee_tab_icon", () -> new Item(new Item.Properties()));
 
     public static ItemStack getThrowableIcon() {
         if (!hasThrowableIndex(DEFAULT_THROWABLE_ICON)
                 || !hasClientThrowableDisplay(DEFAULT_THROWABLE_ICON)) {
-            return new ItemStack(Items.SNOWBALL);
+            return new ItemStack(THROWABLE_TAB_ICON.get());
         }
         ItemStack stack = new ItemStack(THROWABLE.get());
         IThrowable iThrowable = IThrowable.of(stack);
@@ -85,7 +87,7 @@ public class ModItems {
     public static ItemStack getConsumableIcon() {
         if (!hasConsumableIndex(DEFAULT_CONSUMABLE_ICON)
                 || !hasClientConsumableDisplay(DEFAULT_CONSUMABLE_ICON)) {
-            return new ItemStack(Items.GOLDEN_APPLE);
+            return new ItemStack(CONSUMABLE_TAB_ICON.get());
         }
         ItemStack stack = new ItemStack(CONSUMABLE.get());
         IConsumable consumable = IConsumable.of(stack);
@@ -98,7 +100,7 @@ public class ModItems {
     public static ItemStack getMeleeIcon() {
         if (!hasMeleeIndex(DEFAULT_MELEE_ICON)
                 || !hasClientMeleeDisplay(DEFAULT_MELEE_ICON)) {
-            return new ItemStack(Items.NETHERITE_SWORD);
+            return new ItemStack(MELEE_TAB_ICON.get());
         }
         ItemStack stack = new ItemStack(MELEE.get());
         IMeleeWeapon iMeleeWeapon = IMeleeWeapon.of(stack);

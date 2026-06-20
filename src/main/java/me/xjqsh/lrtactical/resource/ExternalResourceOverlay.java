@@ -16,22 +16,24 @@ import java.util.Map;
 import java.util.function.BiFunction;
 
 /**
- * 在 Manager 的 apply() 方法末尾扫描外部目录 (tacz/default_melee/) 中的 JSON 文件，
+ * 在 Manager 的 apply() 方法末尾扫描外部目录 (tacz/lrtactical_official_resources/) 中的 JSON 文件，
  * 并覆盖内置资源。外部文件优先于 JAR 内置资源。
  * <p>
- * 仅处理 namespace=lrtactical 的 default_melee 包。
+ * 仅处理 namespace=lrtactical 的官方资源包。
  * 其他 namespace 的外部包由 TACZ 的 GunPackLoader 处理。
  */
 public final class ExternalResourceOverlay {
 
-    private static final Path PACK_ROOT = FMLPaths.GAMEDIR.get().resolve("tacz/default_melee");
+    private static final Path PACK_ROOT = FMLPaths.GAMEDIR.get()
+            .resolve("tacz")
+            .resolve(DefaultPackExtractor.EXTERNAL_PACK_DIRECTORY);
 
     private ExternalResourceOverlay() {
     }
 
     /**
      * 为 Index Manager 覆盖外部文件。
-     * 外部文件在 tacz/default_melee/data/lrtactical/{subPath}/*.json
+     * 外部文件在 tacz/lrtactical_official_resources/data/lrtactical/{subPath}/*.json
      * 注意：cacheMap 必须是可覆写的 Map（如 HashMap），不能是 ImmutableMap.Builder
      *
      * @param subPath 子路径，如 "index/melee"
@@ -51,7 +53,7 @@ public final class ExternalResourceOverlay {
 
     /**
      * 为 Display Manager 覆盖外部文件。
-     * 外部文件在 tacz/default_melee/assets/lrtactical/{subPath}/*.json
+     * 外部文件在 tacz/lrtactical_official_resources/assets/lrtactical/{subPath}/*.json
      *
      * @param subPath 子路径，如 "display/melee"
      * @param dataMap 目标数据 Map

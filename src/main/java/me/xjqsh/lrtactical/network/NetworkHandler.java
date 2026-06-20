@@ -16,7 +16,7 @@ import net.minecraftforge.network.simple.SimpleChannel;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class NetworkHandler {
-    private static final String VERSION = "0.4.1";
+    private static final String VERSION = "0.5.0-effects-2";
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(new ResourceLocation(EquipmentMod.MOD_ID, "network"),
             () -> VERSION, it -> it.equals(VERSION), it -> it.equals(VERSION));
 
@@ -98,6 +98,18 @@ public class NetworkHandler {
                 SSmokeState::encode,
                 SSmokeState::decode,
                 SSmokeState::handle
+        );
+        CHANNEL.registerMessage(ID_COUNT.getAndIncrement(),
+                SSmokeConfig.class,
+                SSmokeConfig::encode,
+                SSmokeConfig::decode,
+                SSmokeConfig::handle
+        );
+        CHANNEL.registerMessage(ID_COUNT.getAndIncrement(),
+                SClientEffectControl.class,
+                SClientEffectControl::encode,
+                SClientEffectControl::decode,
+                SClientEffectControl::handle
         );
         CHANNEL.registerMessage(ID_COUNT.getAndIncrement(),
                 SExplosionEffect.class,

@@ -3,6 +3,8 @@ package me.xjqsh.lrtactical.entity;
 import me.xjqsh.lrtactical.init.ModSounds;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Rotations;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -22,6 +24,7 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.network.PlayMessages;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.ParametersAreNonnullByDefault;
 import java.util.UUID;
@@ -30,10 +33,9 @@ public class StickyGrenadeEntity extends GrenadeEntity {
     public static EntityType<StickyGrenadeEntity> TYPE = EntityType.Builder.<StickyGrenadeEntity>of(StickyGrenadeEntity::new, MobCategory.MISC)
             .setShouldReceiveVelocityUpdates(true)
             .setTrackingRange(64)
-            .setUpdateInterval(1)
+            .setUpdateInterval(3)
             .setCustomClientFactory(StickyGrenadeEntity::new)
             .sized(0.3f, 0.3f)
-            .noSave()
             .noSummon()
             .fireImmune()
             .build("sticky_grenade_entity");
@@ -85,22 +87,25 @@ public class StickyGrenadeEntity extends GrenadeEntity {
             this.setNoGravity(true);
 
             // Handle Block Stuck Logic (Server Side Only)
-            if (!this.level().isClientSide && this.stuckBlockPos != null) {
+            if (!this.level().isClientSide
+                    && this.stuckBlockPos != null
+                    && this.tickCount % 20 == 0) {
                 BlockState state = this.level().getBlockState(this.stuckBlockPos);
-                if (state.isAir()) {
+                if (state.isAir() || state.getCollisionShape(this.level(), this.stuckBlockPos).isEmpty()) {
                     this.detach();
                 }
             }
 
             // Handle Entity Stuck Logic (Both Sides)
             int entityId = this.entityData.get(STUCK_ENTITY_ID);
-            if (entityId != -1) {
-                Entity entity = this.level().getEntity(entityId);
-                // On server side, fallback to UUID lookup if ID lookup fails (e.g. after load)
-                if (entity == null && !this.level().isClientSide && this.stuckEntityUUID != null && this.level() instanceof ServerLevel serverLevel) {
+            if (entityId != -1 || this.stuckEntityUUID != null) {
+                Entity entity = entityId == -1 ? null : this.level().getEntity(entityId);
+                // Entity IDs are not stable across a save/load cycle, so restore them from UUID.
+                if (entity == null && !this.level().isClientSide
+                        && this.stuckEntityUUID != null
+                        && this.level() instanceof ServerLevel serverLevel) {
                     entity = serverLevel.getEntity(this.stuckEntityUUID);
                     if (entity != null) {
-                        // Restore ID
                         this.entityData.set(STUCK_ENTITY_ID, entity.getId());
                     }
                 }
@@ -119,10 +124,13 @@ public class StickyGrenadeEntity extends GrenadeEntity {
                     Rotations relativeRot = this.entityData.get(STUCK_ROTATION);
                     this.setYRot(yRot + relativeRot.getY());
                     this.setXRot(relativeRot.getX());
-                } else {
-                    // Entity lost or dead — detach on both sides to prevent client ghost
+                } else if (!this.level().isClientSide) {
+                    // The server owns attachment state. A client may temporarily not track the host entity.
                     this.detach();
                 }
+            } else if (!this.level().isClientSide && this.stuckBlockPos == null) {
+                // Recover safely from incomplete or externally edited entity NBT.
+                this.detach();
             }
         }
     }
@@ -133,6 +141,11 @@ public class StickyGrenadeEntity extends GrenadeEntity {
             return;
         }
         super.updateRotation();
+    }
+
+    @Override
+    protected boolean shouldTickThrowableMotion() {
+        return !this.entityData.get(STICKED);
     }
 
     private void alignToVec(Vec3 vec) {
@@ -177,9 +190,56 @@ public class StickyGrenadeEntity extends GrenadeEntity {
     private void detach() {
         this.entityData.set(STICKED, false);
         this.entityData.set(STUCK_ENTITY_ID, -1);
+        this.entityData.set(STUCK_OFFSET, new Rotations(0, 0, 0));
+        this.entityData.set(STUCK_ROTATION, new Rotations(0, 0, 0));
         this.setNoGravity(false);
         this.stuckBlockPos = null;
         this.stuckEntityUUID = null;
+    }
+
+    @Override
+    public void addAdditionalSaveData(@NotNull CompoundTag tag) {
+        super.addAdditionalSaveData(tag);
+        tag.putBoolean("Sticked", this.entityData.get(STICKED));
+        if (this.stuckBlockPos != null) {
+            tag.putLong("StuckBlockPos", this.stuckBlockPos.asLong());
+        }
+        if (this.stuckEntityUUID != null) {
+            tag.putUUID("StuckEntity", this.stuckEntityUUID);
+        }
+        Rotations offset = this.entityData.get(STUCK_OFFSET);
+        tag.putFloat("StuckOffsetX", offset.getX());
+        tag.putFloat("StuckOffsetY", offset.getY());
+        tag.putFloat("StuckOffsetZ", offset.getZ());
+        Rotations rotation = this.entityData.get(STUCK_ROTATION);
+        tag.putFloat("StuckRotationX", rotation.getX());
+        tag.putFloat("StuckRotationY", rotation.getY());
+        tag.putFloat("StuckRotationZ", rotation.getZ());
+    }
+
+    @Override
+    public void readAdditionalSaveData(@NotNull CompoundTag tag) {
+        super.readAdditionalSaveData(tag);
+        boolean sticked = tag.getBoolean("Sticked");
+        this.entityData.set(STICKED, sticked);
+        this.stuckBlockPos = tag.contains("StuckBlockPos", Tag.TAG_LONG)
+                ? BlockPos.of(tag.getLong("StuckBlockPos"))
+                : null;
+        this.stuckEntityUUID = tag.hasUUID("StuckEntity")
+                ? tag.getUUID("StuckEntity")
+                : null;
+        this.entityData.set(STUCK_ENTITY_ID, -1);
+        this.entityData.set(STUCK_OFFSET, new Rotations(
+                tag.getFloat("StuckOffsetX"),
+                tag.getFloat("StuckOffsetY"),
+                tag.getFloat("StuckOffsetZ")
+        ));
+        this.entityData.set(STUCK_ROTATION, new Rotations(
+                tag.getFloat("StuckRotationX"),
+                tag.getFloat("StuckRotationY"),
+                tag.getFloat("StuckRotationZ")
+        ));
+        this.setNoGravity(sticked);
     }
 
     @Override
