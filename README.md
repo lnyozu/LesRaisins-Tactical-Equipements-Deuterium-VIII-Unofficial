@@ -13,7 +13,7 @@ An unofficial Minecraft 1.20.1 maintenance fork of [LesRaisins Tactical Equipmen
 
 The server and all clients must use the same version of this mod.
 
-## Highlights
+## Features
 
 - Reworked and optimized smoke and fire-cloud systems.
 - Improved C4 persistence, cleanup, synchronization, and chain-reaction safety.
