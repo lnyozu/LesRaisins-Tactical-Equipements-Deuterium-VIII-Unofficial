@@ -1,7 +1,6 @@
 {
   "namespace": "lrtactical",
   "dependencies": {
-    "lrtactical": "[0.5.0,)",
     "tacz": "[1.1.5,)"
   }
 }
