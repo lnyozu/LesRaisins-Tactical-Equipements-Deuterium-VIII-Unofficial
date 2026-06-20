@@ -1,14 +1,23 @@
 package me.xjqsh.lrtactical.network.message;
 
 import me.xjqsh.lrtactical.client.smoke.ClientSmokeManager;
+import me.xjqsh.lrtactical.item.throwable.smoke.SmokeRenderMode;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.network.NetworkEvent;
 
 import java.util.UUID;
 import java.util.function.Supplier;
 
-public record SSmokeState(UUID id, Vec3 position, int remainingTicks, boolean removed) {
+public record SSmokeState(
+        UUID id,
+        Vec3 position,
+        int remainingTicks,
+        boolean removed,
+        ResourceLocation throwableIndexId,
+        SmokeRenderMode renderMode
+) {
     private static final int MAX_ACCEPTED_REMAINING_TICKS = 20 * 60 * 60 * 24;
     public static void encode(SSmokeState message, FriendlyByteBuf buffer) {
         buffer.writeUUID(message.id);
@@ -17,6 +26,8 @@ public record SSmokeState(UUID id, Vec3 position, int remainingTicks, boolean re
         buffer.writeDouble(message.position.z);
         buffer.writeVarInt(message.remainingTicks);
         buffer.writeBoolean(message.removed);
+        buffer.writeResourceLocation(message.throwableIndexId);
+        buffer.writeVarInt(message.renderMode.networkId());
     }
 
     public static SSmokeState decode(FriendlyByteBuf buffer) {
@@ -24,7 +35,9 @@ public record SSmokeState(UUID id, Vec3 position, int remainingTicks, boolean re
                 buffer.readUUID(),
                 new Vec3(buffer.readDouble(), buffer.readDouble(), buffer.readDouble()),
                 buffer.readVarInt(),
-                buffer.readBoolean()
+                buffer.readBoolean(),
+                buffer.readResourceLocation(),
+                SmokeRenderMode.fromNetworkId(buffer.readVarInt())
         );
     }
 
@@ -39,7 +52,13 @@ public record SSmokeState(UUID id, Vec3 position, int remainingTicks, boolean re
                         && Double.isFinite(message.position.x)
                         && Double.isFinite(message.position.y)
                         && Double.isFinite(message.position.z)) {
-                    ClientSmokeManager.update(message.id, message.position, message.remainingTicks);
+                    ClientSmokeManager.update(
+                            message.id,
+                            message.position,
+                            message.remainingTicks,
+                            message.throwableIndexId,
+                            message.renderMode
+                    );
                 }
             });
         }

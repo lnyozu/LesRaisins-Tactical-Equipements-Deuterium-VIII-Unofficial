@@ -1,15 +1,22 @@
 package me.xjqsh.lrtactical.client.smoke;
 
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import me.xjqsh.lrtactical.EquipmentMod;
+import me.xjqsh.lrtactical.api.item.IThrowable;
 import me.xjqsh.lrtactical.config.ClientConfig;
 import me.xjqsh.lrtactical.config.SmokeShape;
 import me.xjqsh.lrtactical.init.ModParticleTypes;
+import me.xjqsh.lrtactical.item.throwable.ThrowableData;
+import me.xjqsh.lrtactical.item.throwable.smoke.SmokeRenderMode;
+import me.xjqsh.lrtactical.item.throwable.smoke.SmokeSurfaceData;
+import me.xjqsh.lrtactical.resource.CommonAssetsManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
@@ -17,6 +24,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.client.event.RenderNameTagEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.Event;
@@ -60,7 +68,13 @@ public final class ClientSmokeManager {
     private ClientSmokeManager() {
     }
 
-    public static void update(UUID id, Vec3 position, int remainingTicks) {
+    public static void update(
+            UUID id,
+            Vec3 position,
+            int remainingTicks,
+            ResourceLocation throwableIndexId,
+            SmokeRenderMode renderMode
+    ) {
         ClientLevel level = Minecraft.getInstance().level;
         if (trackedLevel != level) {
             clear();
@@ -68,10 +82,25 @@ public final class ClientSmokeManager {
         }
         ACTIVE_SMOKES.compute(id, (key, existing) -> {
             if (existing == null) {
-                return new ActiveSmoke(position, remainingTicks, clientTicks);
+                return new ActiveSmoke(
+                        position,
+                        remainingTicks,
+                        clientTicks,
+                        sanitizeIndexId(throwableIndexId),
+                        renderMode
+                );
             }
             if (existing.targetPosition.distanceToSqr(position) > VOLUME_REBUILD_DISTANCE_SQR) {
                 existing.volumeDirty = true;
+            }
+            ResourceLocation sanitizedIndexId = sanitizeIndexId(throwableIndexId);
+            if (!existing.throwableIndexId.equals(sanitizedIndexId)) {
+                existing.throwableIndexId = sanitizedIndexId;
+                existing.solidMeshDirty = true;
+            }
+            if (existing.renderMode != renderMode) {
+                existing.renderMode = renderMode;
+                existing.solidMeshDirty = true;
             }
             existing.targetPosition = position;
             existing.remainingTicks = remainingTicks;
@@ -124,6 +153,7 @@ public final class ClientSmokeManager {
 
         clientTicks++;
         int particleBudget = ClientConfig.SMOKE_MAX_PARTICLES_PER_TICK.get();
+        int solidMeshBuildBudget = 1;
         boolean deduplicateSmokeCells = ClientConfig.SMOKE_OVERLAP_DEDUPLICATION.get()
                 && ACTIVE_SMOKES.size() > 1;
         CLAIMED_SMOKE_CELLS.clear();
@@ -136,14 +166,33 @@ public final class ClientSmokeManager {
             }
             smoke.tickVisualPosition();
 
-            double distanceSqr = player.position().distanceToSqr(smoke.position);
             double renderDistance = ClientConfig.SMOKE_RENDER_DISTANCE.get();
-            if (distanceSqr > renderDistance * renderDistance || particleBudget <= 0) {
+            double distanceSqr = player.position().distanceToSqr(smoke.position);
+            if (distanceSqr > renderDistance * renderDistance) {
                 continue;
             }
 
             smoke.ensureVolume(level, clientTicks);
             double expansion = smoke.getExpansionProgress(clientTicks);
+            ThrowableData throwableData = smoke.resolveThrowableData();
+            if (smoke.renderMode == SmokeRenderMode.SOLID_ANIME) {
+                if (solidMeshBuildBudget > 0 && smoke.ensureSolidMesh(
+                        level,
+                        clientTicks,
+                        throwableData.getSmokeSurface()
+                )) {
+                    solidMeshBuildBudget--;
+                }
+                if (!smoke.solidMesh.isEmpty()) {
+                    continue;
+                }
+            } else {
+                smoke.clearSolidMesh();
+            }
+
+            if (particleBudget <= 0) {
+                continue;
+            }
             double uniqueCoverage = smoke.prepareSamplingTable(
                     expansion,
                     CLAIMED_SMOKE_CELLS,
@@ -170,6 +219,43 @@ public final class ClientSmokeManager {
         Entity entity = event.getEntity();
         if (entity instanceof Player && isInsideSmoke(entity)) {
             event.setResult(Event.Result.DENY);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onRenderSolidSmoke(RenderLevelStageEvent event) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_ENTITIES
+                || ACTIVE_SMOKES.isEmpty()) {
+            return;
+        }
+
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level == null || trackedLevel != minecraft.level) {
+            return;
+        }
+        Vec3 cameraPosition = event.getCamera().getPosition();
+        double renderDistance = ClientConfig.SMOKE_RENDER_DISTANCE.get();
+        double renderDistanceSquared = renderDistance * renderDistance;
+        var bufferSource = minecraft.renderBuffers().bufferSource();
+        VertexConsumer consumer = bufferSource.getBuffer(SolidAnimeSmokeRenderType.INSTANCE);
+        boolean drewAny = false;
+        for (ActiveSmoke smoke : ACTIVE_SMOKES.values()) {
+            if (smoke.solidMesh.isEmpty()
+                    || smoke.renderMode != SmokeRenderMode.SOLID_ANIME
+                    || smoke.position.distanceToSqr(cameraPosition) > renderDistanceSquared) {
+                continue;
+            }
+            smoke.solidMesh.render(
+                    event.getPoseStack().last(),
+                    consumer,
+                    cameraPosition,
+                    smoke.position,
+                    smoke.getSolidExpansionScale()
+            );
+            drewAny = true;
+        }
+        if (drewAny) {
+            bufferSource.endBatch(SolidAnimeSmokeRenderType.INSTANCE);
         }
     }
 
@@ -248,11 +334,17 @@ public final class ClientSmokeManager {
         clientTicks = 0;
     }
 
+    private static ResourceLocation sanitizeIndexId(ResourceLocation id) {
+        return id == null ? IThrowable.EMPTY : id;
+    }
+
     private static final class ActiveSmoke {
         private Vec3 position;
         private Vec3 targetPosition;
         private int remainingTicks;
         private final int startTick;
+        private ResourceLocation throwableIndexId;
+        private SmokeRenderMode renderMode;
         private Vec3 volumeCenter;
         private boolean volumeDirty = true;
         private int lastVolumeBuildTick = -3;
@@ -266,12 +358,26 @@ public final class ClientSmokeManager {
         private double[] cumulativeSamplingWeights = new double[0];
         private double samplingTotalWeight;
         private double cachedSamplingExpansion = Double.NaN;
+        private SolidAnimeSmokeMesh solidMesh = SolidAnimeSmokeMesh.EMPTY;
+        private boolean solidMeshDirty = true;
+        private int lastSolidMeshBuildTick = Integer.MIN_VALUE;
+        private int solidMeshVisualSignature;
 
-        private ActiveSmoke(Vec3 position, int remainingTicks, int startTick) {
+        private ActiveSmoke(
+                Vec3 position,
+                int remainingTicks,
+                int startTick,
+                ResourceLocation throwableIndexId,
+                SmokeRenderMode renderMode
+        ) {
             this.position = position;
             this.targetPosition = position;
             this.remainingTicks = remainingTicks;
             this.startTick = startTick;
+            this.throwableIndexId = throwableIndexId;
+            this.renderMode = renderMode == null
+                    ? SmokeRenderMode.PARTICLE
+                    : renderMode;
         }
 
         private void tickVisualPosition() {
@@ -303,7 +409,68 @@ public final class ClientSmokeManager {
             rebuildVolume(level);
             volumeCenter = position;
             volumeDirty = false;
+            solidMeshDirty = true;
             lastVolumeBuildTick = tick;
+        }
+
+        private ThrowableData resolveThrowableData() {
+            var index = CommonAssetsManager.get().getThrowableIndex(throwableIndexId);
+            return index == null ? DEFAULT_THROWABLE_DATA : index.getData();
+        }
+
+        private boolean ensureSolidMesh(
+                ClientLevel level,
+                int tick,
+                SmokeSurfaceData settings
+        ) {
+            int visualSignature = settings.visualSignature();
+            if (visualSignature != solidMeshVisualSignature) {
+                solidMeshVisualSignature = visualSignature;
+                solidMeshDirty = true;
+            }
+
+            boolean intervalElapsed =
+                    tick - lastSolidMeshBuildTick >= settings.getRebuildIntervalTicks();
+            if (!solidMeshDirty) {
+                return false;
+            }
+            if (!intervalElapsed && lastSolidMeshBuildTick != Integer.MIN_VALUE) {
+                return false;
+            }
+
+            HashSet<Long> occupiedCells = new HashSet<>();
+            for (SmokeCell smokeCell : smokeBlocks) {
+                occupiedCells.add(smokeCell.pos().asLong());
+            }
+            solidMesh = SolidAnimeSmokeMesh.build(
+                    level,
+                    position,
+                    occupiedCells,
+                    settings
+            );
+            lastSolidMeshBuildTick = tick;
+            solidMeshDirty = false;
+            return true;
+        }
+
+        private double getSolidExpansionScale() {
+            double expansion = getExpansionProgress(clientTicks);
+            double normalized = Math.max(
+                    0.0D,
+                    Math.min(1.0D, (expansion - INITIAL_EXPANSION_PROGRESS)
+                            / (1.0D - INITIAL_EXPANSION_PROGRESS))
+            );
+            double smoother = normalized * normalized * normalized
+                    * (normalized * (normalized * 6.0D - 15.0D) + 10.0D);
+            return 0.08D + 0.92D * smoother;
+        }
+
+        private void clearSolidMesh() {
+            if (!solidMesh.isEmpty()) {
+                solidMesh = SolidAnimeSmokeMesh.EMPTY;
+            }
+            solidMeshDirty = true;
+            lastSolidMeshBuildTick = Integer.MIN_VALUE;
         }
 
         private void rebuildVolume(ClientLevel level) {
@@ -640,4 +807,6 @@ public final class ClientSmokeManager {
             boolean directlyVisible
     ) {
     }
+
+    private static final ThrowableData DEFAULT_THROWABLE_DATA = new ThrowableData();
 }

@@ -1,12 +1,16 @@
 package me.xjqsh.lrtactical.server.smoke;
 
 import me.xjqsh.lrtactical.EquipmentMod;
+import me.xjqsh.lrtactical.api.item.IThrowable;
 import me.xjqsh.lrtactical.config.ServerConfig;
 import me.xjqsh.lrtactical.entity.SmokeGrenadeEntity;
 import me.xjqsh.lrtactical.network.NetworkHandler;
 import me.xjqsh.lrtactical.network.message.SSmokeConfig;
 import me.xjqsh.lrtactical.network.message.SSmokeState;
+import me.xjqsh.lrtactical.item.throwable.smoke.SmokeRenderMode;
+import me.xjqsh.lrtactical.resource.CommonAssetsManager;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
@@ -32,16 +36,32 @@ public final class ServerSmokeManager {
     private ServerSmokeManager() {
     }
 
-    public static void register(ServerLevel level, UUID id, Vec3 position, int remainingTicks) {
+    public static void register(
+            ServerLevel level,
+            UUID id,
+            Vec3 position,
+            int remainingTicks,
+            ResourceLocation throwableIndexId
+    ) {
         if (remainingTicks <= 0) {
             return;
         }
-        ActiveSmoke smoke = new ActiveSmoke(position, level.getGameTime() + remainingTicks);
+        ActiveSmoke smoke = new ActiveSmoke(
+                position,
+                level.getGameTime() + remainingTicks,
+                sanitizeIndexId(throwableIndexId)
+        );
         ACTIVE_SMOKES.computeIfAbsent(level.dimension(), key -> new HashMap<>()).put(id, smoke);
         sendState(level, id, smoke, remainingTicks, false);
     }
 
-    public static void updatePosition(ServerLevel level, UUID id, Vec3 position, int remainingTicks) {
+    public static void updatePosition(
+            ServerLevel level,
+            UUID id,
+            Vec3 position,
+            int remainingTicks,
+            ResourceLocation throwableIndexId
+    ) {
         if (remainingTicks <= 0) {
             remove(level, id);
             return;
@@ -49,20 +69,23 @@ public final class ServerSmokeManager {
 
         Map<UUID, ActiveSmoke> smokes = ACTIVE_SMOKES.get(level.dimension());
         if (smokes == null) {
-            register(level, id, position, remainingTicks);
+            register(level, id, position, remainingTicks, throwableIndexId);
             return;
         }
 
         ActiveSmoke smoke = smokes.get(id);
         if (smoke == null) {
-            register(level, id, position, remainingTicks);
+            register(level, id, position, remainingTicks, throwableIndexId);
             return;
         }
 
         boolean moved = smoke.position.distanceToSqr(position) > 0.01D;
+        ResourceLocation sanitizedIndexId = sanitizeIndexId(throwableIndexId);
+        boolean indexChanged = !smoke.throwableIndexId.equals(sanitizedIndexId);
         smoke.position = position;
         smoke.expiresAt = level.getGameTime() + remainingTicks;
-        if (moved) {
+        smoke.throwableIndexId = sanitizedIndexId;
+        if (moved || indexChanged) {
             sendState(level, id, smoke, remainingTicks, false);
         }
     }
@@ -208,7 +231,14 @@ public final class ServerSmokeManager {
                                   int remainingTicks, boolean removed) {
         double syncRange = ServerConfig.getSmokeSyncRange();
         double rangeSqr = syncRange * syncRange;
-        SSmokeState message = new SSmokeState(id, smoke.position, remainingTicks, removed);
+        SSmokeState message = new SSmokeState(
+                id,
+                smoke.position,
+                remainingTicks,
+                removed,
+                smoke.throwableIndexId,
+                resolveRenderMode(smoke.throwableIndexId)
+        );
         for (ServerPlayer player : level.players()) {
             if (player.position().distanceToSqr(smoke.position) <= rangeSqr) {
                 NetworkHandler.sendToClientPlayer(message, player);
@@ -219,10 +249,27 @@ public final class ServerSmokeManager {
     private static final class ActiveSmoke {
         private Vec3 position;
         private long expiresAt;
+        private ResourceLocation throwableIndexId;
 
-        private ActiveSmoke(Vec3 position, long expiresAt) {
+        private ActiveSmoke(
+                Vec3 position,
+                long expiresAt,
+                ResourceLocation throwableIndexId
+        ) {
             this.position = position;
             this.expiresAt = expiresAt;
+            this.throwableIndexId = throwableIndexId;
         }
+    }
+
+    private static ResourceLocation sanitizeIndexId(ResourceLocation id) {
+        return id == null ? IThrowable.EMPTY : id;
+    }
+
+    private static SmokeRenderMode resolveRenderMode(ResourceLocation indexId) {
+        var index = CommonAssetsManager.get().getThrowableIndex(indexId);
+        return index == null
+                ? SmokeRenderMode.PARTICLE
+                : index.getData().getSmokeRenderMode();
     }
 }

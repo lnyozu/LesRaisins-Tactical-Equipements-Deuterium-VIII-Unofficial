@@ -1,7 +1,9 @@
 package me.xjqsh.lrtactical.entity;
 
+import me.xjqsh.lrtactical.api.item.IThrowable;
 import me.xjqsh.lrtactical.config.ServerConfig;
 import me.xjqsh.lrtactical.server.smoke.ServerSmokeManager;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -54,12 +56,24 @@ public class SmokeGrenadeEntity extends ThrowableItemEntity {
             if (this.level() instanceof ServerLevel serverLevel) {
                 int smokeStartTime = ServerConfig.getSmokeStartDelayTicks();
                 if (tickCount == smokeStartTime) {
-                    ServerSmokeManager.register(serverLevel, this.getUUID(), this.position(), remainingTicks);
+                    ServerSmokeManager.register(
+                            serverLevel,
+                            this.getUUID(),
+                            this.position(),
+                            remainingTicks,
+                            getThrowableIndexId()
+                    );
                     playThrowableSound("release", 1.0f, 1.0f);
                 } else if (tickCount > smokeStartTime && (enteredMotionSleep
                         || (!motionSleeping
                         && tickCount % ServerConfig.getSmokeMovingSyncIntervalTicks() == 0))) {
-                    ServerSmokeManager.updatePosition(serverLevel, this.getUUID(), this.position(), remainingTicks);
+                    ServerSmokeManager.updatePosition(
+                            serverLevel,
+                            this.getUUID(),
+                            this.position(),
+                            remainingTicks,
+                            getThrowableIndexId()
+                    );
                 }
             }
         }
@@ -103,6 +117,14 @@ public class SmokeGrenadeEntity extends ThrowableItemEntity {
         return this.getLife() > 0
                 ? Math.min(Math.max(0, this.getLife() - this.tickCount), cleanupRemaining)
                 : cleanupRemaining;
+    }
+
+    private ResourceLocation getThrowableIndexId() {
+        var stack = this.getItem();
+        if (stack.getItem() instanceof IThrowable throwable) {
+            return throwable.getId(stack);
+        }
+        return IThrowable.EMPTY;
     }
 
     @Override

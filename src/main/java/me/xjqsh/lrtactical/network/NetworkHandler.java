@@ -16,7 +16,7 @@ import net.minecraftforge.network.simple.SimpleChannel;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class NetworkHandler {
-    private static final String VERSION = "0.6.0-effects-2";
+    private static final String VERSION = "0.6.1-effects-4";
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(new ResourceLocation(EquipmentMod.MOD_ID, "network"),
             () -> VERSION, it -> it.equals(VERSION), it -> it.equals(VERSION));
 

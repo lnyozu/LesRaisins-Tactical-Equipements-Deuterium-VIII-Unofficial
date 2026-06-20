@@ -1,6 +1,8 @@
 package me.xjqsh.lrtactical.item.throwable;
 
 import com.google.gson.annotations.SerializedName;
+import me.xjqsh.lrtactical.item.throwable.smoke.SmokeRenderMode;
+import me.xjqsh.lrtactical.item.throwable.smoke.SmokeSurfaceData;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
@@ -29,6 +31,12 @@ public class ThrowableData {
 
     @SerializedName("put_away_time")
     private long putAwayTime = 0;
+
+    @SerializedName("smoke_render_mode")
+    private String smokeRenderMode = SmokeRenderMode.PARTICLE.configName();
+
+    @SerializedName("smoke_surface")
+    private SmokeSurfaceData smokeSurface = new SmokeSurfaceData();
 
     public int getPrepareTime() {
         return prepareTime;
@@ -61,5 +69,13 @@ public class ThrowableData {
 
     public boolean isCookable() {
         return cookable;
+    }
+
+    public SmokeRenderMode getSmokeRenderMode() {
+        return SmokeRenderMode.fromConfig(smokeRenderMode);
+    }
+
+    public SmokeSurfaceData getSmokeSurface() {
+        return smokeSurface == null ? new SmokeSurfaceData() : smokeSurface;
     }
 }
