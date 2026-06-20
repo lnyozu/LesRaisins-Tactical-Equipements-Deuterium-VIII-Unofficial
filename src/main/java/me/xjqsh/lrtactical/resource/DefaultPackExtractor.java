@@ -3,260 +3,327 @@ package me.xjqsh.lrtactical.resource;
 import me.xjqsh.lrtactical.EquipmentMod;
 import net.minecraftforge.fml.loading.FMLPaths;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
-import java.net.URL;
-import java.nio.file.*;
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.Map;
-import java.util.stream.Stream;
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.security.DigestInputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Comparator;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Properties;
+import java.util.UUID;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 /**
- * 首次启动时自动将 mod JAR 中的默认资源文件解压到 tacz/default_melee/ 目录。
- * 参考 TACZ 的 GunPackLoader 机制，让用户可以方便地修改配置文件。
- * <p>
- * 幂等操作：若目标目录已存在 gunpack.meta.json 则跳过。
+ * Installs the optional official resource pack embedded by the local
+ * {@code buildBundled} task. Public core builds do not contain this resource,
+ * so they simply continue without installing anything.
  */
 public final class DefaultPackExtractor {
+    public static final String EMBEDDED_PACK_RESOURCE =
+            "embedded_packs/lrtactical_official_resources.zip";
+    public static final String EXTERNAL_PACK_DIRECTORY =
+            "lrtactical_official_resources";
+
+    private static final String MANAGED_STATE_FILE = ".lrtactical-managed.properties";
+    private static final String STATE_PACK_HASH = "pack_sha256";
+    private static final String STATE_CONTENT_HASH = "content_sha256";
+    private static final long MAX_EXTRACTED_BYTES = 256L * 1024L * 1024L;
+    private static final int MAX_ENTRY_COUNT = 10_000;
 
     private DefaultPackExtractor() {
     }
 
-    /**
-     * 检查并执行资源解压。已存在则跳过。
-     */
     public static void extractIfNeeded() {
-        Path packDir = FMLPaths.GAMEDIR.get().resolve("tacz/default_melee");
-        Path metaFile = packDir.resolve("gunpack.meta.json");
+        ClassLoader classLoader = DefaultPackExtractor.class.getClassLoader();
+        try (InputStream input = classLoader.getResourceAsStream(EMBEDDED_PACK_RESOURCE)) {
+            if (input == null) {
+                EquipmentMod.LOGGER.debug(
+                        "No embedded official resource pack found; external TACZ packs remain available"
+                );
+                return;
+            }
 
-        if (Files.exists(metaFile)) {
-            return;
-        }
+            byte[] embeddedPack = input.readAllBytes();
+            String embeddedPackHash = sha256(embeddedPack);
+            Path taczDirectory = FMLPaths.GAMEDIR.get().resolve("tacz");
+            Path targetDirectory = taczDirectory.resolve(EXTERNAL_PACK_DIRECTORY);
+            Files.createDirectories(taczDirectory);
 
-        try {
-            Files.createDirectories(packDir);
+            InstallDecision decision = inspectTarget(targetDirectory, embeddedPackHash);
+            switch (decision) {
+                case UP_TO_DATE -> {
+                    return;
+                }
+                case USER_MANAGED -> {
+                    EquipmentMod.LOGGER.info(
+                            "Using user-managed external official resource pack directory at {}",
+                            targetDirectory
+                    );
+                    return;
+                }
+                case MODIFIED -> {
+                    EquipmentMod.LOGGER.warn(
+                            "The previously extracted official resource pack directory was modified; " +
+                                    "the bundled copy will not overwrite it: {}",
+                            targetDirectory
+                    );
+                    return;
+                }
+                case INVALID_TARGET -> {
+                    EquipmentMod.LOGGER.warn(
+                            "Official resource pack target is not a directory, leaving it untouched: {}",
+                            targetDirectory
+                    );
+                    return;
+                }
+                case INSTALL -> {
+                    // Continue below.
+                }
+            }
 
-            // 写入 pack 元数据
-            Files.writeString(metaFile, "{\"namespace\": \"lrtactical\"}");
-
-            EquipmentMod.LOGGER.info("Extracting default pack to {}", packDir);
-
-            // 解压 assets 和 data 目录
-            extractDirectory("assets/lrtactical", packDir.resolve("assets/lrtactical"));
-            extractDirectory("data/lrtactical", packDir.resolve("data/lrtactical"));
-
-            EquipmentMod.LOGGER.info("Default pack extracted successfully to {}", packDir);
+            installDirectoryPack(targetDirectory, embeddedPack, embeddedPackHash);
+            EquipmentMod.LOGGER.info(
+                    "Installed bundled official resource pack directory to {}",
+                    targetDirectory
+            );
         } catch (Exception e) {
-            EquipmentMod.LOGGER.error("Failed to extract default pack to {}", packDir, e);
-            // 清理失败的提取
-            cleanup(packDir);
+            // Resource pack installation is optional and must never prevent the
+            // core mod from loading.
+            EquipmentMod.LOGGER.error(
+                    "Failed to install bundled official resource pack; continuing with external packs only",
+                    e
+            );
         }
     }
 
-    /**
-     * 从 classpath 中递归复制整个目录到目标路径。
-     * 同时处理 JAR 内文件（生产环境）和文件系统（开发环境）。
-     */
-    private static void extractDirectory(String classpathBase, Path targetDir) throws Exception {
-        ClassLoader cl = DefaultPackExtractor.class.getClassLoader();
-        Enumeration<URL> resources = cl.getResources(classpathBase);
-        if (!resources.hasMoreElements()) {
-            EquipmentMod.LOGGER.warn("No resources found for {}", classpathBase);
-            return;
+    private static InstallDecision inspectTarget(Path targetDirectory, String embeddedPackHash)
+            throws IOException {
+        if (!Files.exists(targetDirectory)) {
+            return InstallDecision.INSTALL;
+        }
+        if (!Files.isDirectory(targetDirectory)) {
+            return InstallDecision.INVALID_TARGET;
         }
 
-        URL baseUrl = resources.nextElement();
-        URI uri = baseUrl.toURI();
-
-        if ("jar".equals(uri.getScheme())) {
-            // 生产环境：资源在 JAR 内部
-            extractFromJar(classpathBase, targetDir, uri);
-        } else {
-            // 开发环境：资源在文件系统
-            copyRecursive(Paths.get(uri), targetDir);
+        Path stateFile = targetDirectory.resolve(MANAGED_STATE_FILE);
+        if (!Files.isRegularFile(stateFile)) {
+            return InstallDecision.USER_MANAGED;
         }
+
+        Properties state = readState(stateFile);
+        String previousPackHash = state.getProperty(STATE_PACK_HASH, "");
+        String previousContentHash = state.getProperty(STATE_CONTENT_HASH, "");
+        String currentContentHash = hashDirectory(targetDirectory);
+
+        if (!currentContentHash.equalsIgnoreCase(previousContentHash)) {
+            return InstallDecision.MODIFIED;
+        }
+
+        return embeddedPackHash.equalsIgnoreCase(previousPackHash)
+                ? InstallDecision.UP_TO_DATE
+                : InstallDecision.INSTALL;
     }
 
-    /**
-     * 从 JAR 内提取目录
-     */
-    private static void extractFromJar(String classpathBase, Path targetDir, URI jarResourceUri) throws IOException {
-        // jar:file:/path/to/mod.jar!/assets/lrtactical
-        String spec = jarResourceUri.getSchemeSpecificPart();
-        int sep = spec.lastIndexOf('!');
-        String jarUrl = spec.substring(0, sep);
-        String entryPath = spec.substring(sep + 1);
-        if (entryPath.startsWith("/")) {
-            entryPath = entryPath.substring(1);
-        }
-
-        URI jarUri = URI.create(jarUrl);
+    private static void installDirectoryPack(
+            Path targetDirectory,
+            byte[] embeddedPack,
+            String embeddedPackHash
+    ) throws IOException {
+        Path parent = targetDirectory.getParent();
+        Files.createDirectories(parent);
+        Path stagingDirectory = Files.createTempDirectory(parent, "lrtactical-pack-");
+        Path backupDirectory = parent.resolve(
+                targetDirectory.getFileName() + ".backup-" + UUID.randomUUID()
+        );
+        boolean targetMovedToBackup = false;
 
         try {
-            // 尝试使用已有的 FileSystem（Forge SecureJar）
-            FileSystem fs;
-            try {
-                fs = FileSystems.getFileSystem(jarUri);
-            } catch (FileSystemNotFoundException e) {
-                fs = FileSystems.newFileSystem(jarUri, Collections.emptyMap());
+            extractZip(embeddedPack, stagingDirectory);
+            validatePackRoot(stagingDirectory);
+
+            String contentHash = hashDirectory(stagingDirectory);
+            writeState(
+                    stagingDirectory.resolve(MANAGED_STATE_FILE),
+                    embeddedPackHash,
+                    contentHash
+            );
+
+            if (Files.exists(targetDirectory)) {
+                moveDirectory(targetDirectory, backupDirectory);
+                targetMovedToBackup = true;
             }
 
-            try {
-                Path sourceRoot = fs.getPath("/", entryPath);
-                if (Files.exists(sourceRoot)) {
-                    copyRecursive(sourceRoot, targetDir);
-                }
-            } finally {
-                // 不关闭 fs，因为可能是 Forge 的共享 SecureJar FileSystem
+            moveDirectory(stagingDirectory, targetDirectory);
+            if (targetMovedToBackup) {
+                deleteRecursively(backupDirectory);
             }
         } catch (Exception e) {
-            // JAR FileSystem 失败时，回退到逐个文件提取
-            EquipmentMod.LOGGER.warn("JAR FileSystem extraction failed for {}, trying fallback", classpathBase, e);
-            extractFromJarFallback(classpathBase, targetDir);
+            if (!Files.exists(targetDirectory) && targetMovedToBackup
+                    && Files.exists(backupDirectory)) {
+                try {
+                    moveDirectory(backupDirectory, targetDirectory);
+                } catch (IOException restoreError) {
+                    e.addSuppressed(restoreError);
+                }
+            }
+            if (e instanceof IOException ioException) {
+                throw ioException;
+            }
+            throw new IOException("Failed to install official resource pack directory", e);
+        } finally {
+            deleteRecursively(stagingDirectory);
+            if (Files.exists(targetDirectory)) {
+                deleteRecursively(backupDirectory);
+            }
         }
     }
 
-    /**
-     * 回退方案：通过 ClassLoader.getResources 逐个文件提取
-     */
-    private static void extractFromJarFallback(String classpathBase, Path targetDir) throws IOException {
-        ClassLoader cl = DefaultPackExtractor.class.getClassLoader();
-        extractResourceRecursive(cl, classpathBase, targetDir);
+    private static void extractZip(byte[] archive, Path targetDirectory) throws IOException {
+        int entryCount = 0;
+        long extractedBytes = 0L;
+        byte[] buffer = new byte[8192];
+
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(archive))) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (++entryCount > MAX_ENTRY_COUNT) {
+                    throw new IOException("Embedded resource pack contains too many entries");
+                }
+
+                Path output = targetDirectory.resolve(entry.getName()).normalize();
+                if (!output.startsWith(targetDirectory)) {
+                    throw new IOException("Unsafe path in embedded resource pack: " + entry.getName());
+                }
+
+                if (entry.isDirectory()) {
+                    Files.createDirectories(output);
+                    continue;
+                }
+
+                Files.createDirectories(output.getParent());
+                try (var outputStream = Files.newOutputStream(output)) {
+                    int read;
+                    while ((read = zip.read(buffer)) != -1) {
+                        extractedBytes += read;
+                        if (extractedBytes > MAX_EXTRACTED_BYTES) {
+                            throw new IOException("Embedded resource pack exceeds extraction limit");
+                        }
+                        outputStream.write(buffer, 0, read);
+                    }
+                }
+            }
+        }
     }
 
-    private static void extractResourceRecursive(ClassLoader cl, String path, Path targetDir) throws IOException {
-        Enumeration<URL> resources;
+    private static void validatePackRoot(Path directory) throws IOException {
+        if (!Files.isRegularFile(directory.resolve("gunpack.meta.json"))) {
+            throw new IOException("Embedded resource pack is missing gunpack.meta.json");
+        }
+        if (!Files.isDirectory(directory.resolve("assets"))) {
+            throw new IOException("Embedded resource pack is missing assets directory");
+        }
+        if (!Files.isDirectory(directory.resolve("data"))) {
+            throw new IOException("Embedded resource pack is missing data directory");
+        }
+    }
+
+    private static Properties readState(Path stateFile) throws IOException {
+        Properties properties = new Properties();
+        try (StringReader reader = new StringReader(Files.readString(stateFile))) {
+            properties.load(reader);
+        }
+        return properties;
+    }
+
+    private static void writeState(Path stateFile, String packHash, String contentHash)
+            throws IOException {
+        Properties properties = new Properties();
+        properties.setProperty(STATE_PACK_HASH, packHash);
+        properties.setProperty(STATE_CONTENT_HASH, contentHash);
+        try (StringWriter writer = new StringWriter()) {
+            properties.store(writer, "Managed by LesRaisins Tactical bundled build");
+            Files.writeString(stateFile, writer.toString(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private static String hashDirectory(Path directory) throws IOException {
+        MessageDigest digest = newDigest();
+        List<Path> files;
+        try (var stream = Files.walk(directory)) {
+            files = stream.filter(Files::isRegularFile)
+                    .filter(path -> !path.getFileName().toString().equals(MANAGED_STATE_FILE))
+                    .sorted(Comparator.comparing(path -> normalizedRelativePath(directory, path)))
+                    .toList();
+        }
+
+        byte[] separator = new byte[]{0};
+        byte[] buffer = new byte[8192];
+        for (Path file : files) {
+            digest.update(normalizedRelativePath(directory, file).getBytes(StandardCharsets.UTF_8));
+            digest.update(separator);
+            try (InputStream input = Files.newInputStream(file);
+                 DigestInputStream digestInput = new DigestInputStream(input, digest)) {
+                while (digestInput.read(buffer) != -1) {
+                    // DigestInputStream updates the digest.
+                }
+            }
+            digest.update(separator);
+        }
+        return HexFormat.of().formatHex(digest.digest());
+    }
+
+    private static String normalizedRelativePath(Path root, Path file) {
+        return root.relativize(file).toString().replace('\\', '/');
+    }
+
+    private static void moveDirectory(Path source, Path target) throws IOException {
         try {
-            resources = cl.getResources(path);
-        } catch (IOException e) {
+            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException ignored) {
+            Files.move(source, target);
+        }
+    }
+
+    private static void deleteRecursively(Path root) throws IOException {
+        if (root == null || !Files.exists(root)) {
             return;
         }
-
-        while (resources.hasMoreElements()) {
-            URL url = resources.nextElement();
-            try {
-                // 如果是目录，URL 以 / 结尾
-                Path target = targetDir;
-                String urlPath = url.getPath();
-                String fileName = urlPath.substring(urlPath.lastIndexOf('/') + 1);
-
-                if (fileName.isEmpty() || urlPath.endsWith("/")) {
-                    // 这是一个目录 — 跳过
-                } else {
-                    // 这是一个文件
-                    Files.createDirectories(target);
-                    try (InputStream is = url.openStream()) {
-                        Files.copy(is, target.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
-                    }
-                }
-            } catch (Exception ignored) {
-                // 跳过无法访问的资源
-            }
-        }
-
-        // 对于目录结构，递归扫描已知的子目录
-        String[] knownSubDirs = {
-                "display", "animations", "geo_models", "models", "sounds", "tacz_sounds",
-                "textures", "scripts", "lang", "particles", "player_animator",
-                "index", "recipes", "recipe_filters", "data"
-        };
-
-        for (String subDir : knownSubDirs) {
-            String subPath = path + "/" + subDir;
-            Path subTarget = targetDir.resolve(subDir);
-            try {
-                extractRecursiveInternal(cl, subPath, subTarget);
-            } catch (Exception ignored) {
+        try (var stream = Files.walk(root)) {
+            for (Path path : stream.sorted(Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(path);
             }
         }
     }
 
-    private static void extractRecursiveInternal(ClassLoader cl, String path, Path targetDir) throws IOException {
-        Enumeration<URL> resources;
+    private static String sha256(byte[] content) {
+        MessageDigest digest = newDigest();
+        return HexFormat.of().formatHex(digest.digest(content));
+    }
+
+    private static MessageDigest newDigest() {
         try {
-            resources = cl.getResources(path);
-        } catch (IOException e) {
-            return;
-        }
-
-        while (resources.hasMoreElements()) {
-            URL url = resources.nextElement();
-            try {
-                String urlPath = url.getPath();
-                // JAR 内路径格式: jar:file:...jar!/path/to/resource
-                if (url.getProtocol().equals("jar")) {
-                    String innerPath = urlPath.substring(urlPath.lastIndexOf('!') + 1);
-                    if (innerPath.startsWith("/")) innerPath = innerPath.substring(1);
-                    Files.createDirectories(targetDir);
-
-                    String fileName = innerPath.substring(innerPath.lastIndexOf('/') + 1);
-                    if (!fileName.isEmpty() && !innerPath.endsWith("/")) {
-                        try (InputStream is = url.openStream()) {
-                            Files.copy(is, targetDir.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
-                        }
-                    }
-                } else {
-                    // 文件系统中的路径
-                    Path source = Paths.get(url.toURI());
-                    if (Files.isDirectory(source)) {
-                        copyRecursive(source, targetDir);
-                    } else {
-                        Files.createDirectories(targetDir);
-                        try (InputStream is = url.openStream()) {
-                            Files.copy(is, targetDir.resolve(source.getFileName()), StandardCopyOption.REPLACE_EXISTING);
-                        }
-                    }
-                }
-            } catch (Exception ignored) {
-            }
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
         }
     }
 
-    /**
-     * 递归复制目录或文件
-     */
-    private static void copyRecursive(Path source, Path target) throws IOException {
-        if (Files.isDirectory(source)) {
-            try (Stream<Path> stream = Files.walk(source)) {
-                stream.forEach(src -> {
-                    Path dst = target.resolve(source.relativize(src).toString());
-                    try {
-                        if (Files.isDirectory(src)) {
-                            Files.createDirectories(dst);
-                        } else {
-                            Files.createDirectories(dst.getParent());
-                            Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
-                        }
-                    } catch (IOException e) {
-                        EquipmentMod.LOGGER.warn("Failed to copy {} to {}", src, dst, e);
-                    }
-                });
-            }
-        } else {
-            Files.createDirectories(target.getParent());
-            Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
-        }
-    }
-
-    /**
-     * 清理失败的提取
-     */
-    private static void cleanup(Path packDir) {
-        try {
-            if (Files.exists(packDir)) {
-                try (Stream<Path> walk = Files.walk(packDir)) {
-                    walk.sorted(java.util.Comparator.reverseOrder())
-                            .forEach(path -> {
-                                try {
-                                    Files.delete(path);
-                                } catch (IOException ignored) {
-                                }
-                            });
-                }
-            }
-        } catch (IOException ignored) {
-        }
+    private enum InstallDecision {
+        INSTALL,
+        UP_TO_DATE,
+        USER_MANAGED,
+        MODIFIED,
+        INVALID_TARGET
     }
 }

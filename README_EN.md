@@ -17,8 +17,39 @@ An unofficial fork of [LesRaisins Tactical Equipments](https://github.com/LesRai
 2. Reliable enchantment configuration: three independent toggles for enchantment combat effects, anvil enchanting, and enchanting table; anvil merge protection.
 3. `IMeleeWeapon` interface compatibility with all LesRaisins officially compatible melee weapon packs.
 4. Server-side smoke synchronization, explosion visual effects networking, and player name tag hiding inside smoke.
-5. Bundled tactical equipment resources auto-extract to `tacz/default_melee/` on first launch for easy customization.
-6. Custom Lore text via `tooltip` field in Index, with translation key and HEX color support.
+5. Custom Lore text via `tooltip` field in Index, with translation key and HEX color support.
+
+## Resource Pack and Build Modes
+
+> This repository and its public core JAR do not contain the original author's All Rights Reserved models, textures, animations, or sounds. Those resources remain local to the developer; the build scripts only provide optional local packaging support.
+
+The code core is separated from the original author's All Rights Reserved art assets. Default content under `assets/lrtactical` and `data/lrtactical` is excluded from the public core JAR.
+
+```powershell
+# Public core JAR without official default content
+.\gradlew.bat build
+
+# Build the external official pack for .minecraft/tacz/
+.\gradlew.bat buildOfficialPack
+
+# Build a local bundled JAR that extracts the embedded official pack
+.\gradlew.bat buildBundled
+
+# Install the official pack into all development run directories
+.\gradlew.bat installOfficialPackForRuns
+```
+
+Outputs:
+
+- Core and bundled JARs: `build/libs/`
+- External official pack: `build/packs/lrtactical-official-resources-<version>.zip`
+- Bundled extraction target: `.minecraft/tacz/lrtactical_official_resources/`
+
+The bundled build expands its embedded archive into TACZ's native folder-pack layout. It does not overwrite a manually installed pack or a user-modified extracted directory. When only the core JAR is installed with no compatible content pack, the mod still loads normally: its three creative tabs use a snowball, golden apple, and netherite sword as safe icons, while their default content lists remain empty.
+
+Local official resources are retained in the Git-ignored `src/main/resources/assets/lrtactical/` directory. A core build still succeeds when this directory is absent; `buildOfficialPack` and `buildBundled` instead fail with a clear message.
+
+The pack under `build/packs/` and JARs carrying the `-bundled` suffix may contain locally retained ARR art assets. Do not upload or publicly distribute those local artifacts without the original author's permission. Public releases should use the core JAR without the `-bundled` suffix.
 
 ## Configuration
 

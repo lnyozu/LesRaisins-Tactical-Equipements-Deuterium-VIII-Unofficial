@@ -17,8 +17,39 @@
 2. 附魔效果可靠配置：附魔战斗效果、铁砧附魔、附魔台附魔三项独立开关，铁砧合成保护。
 3. 兼容所有LesRaisins官方兼容的近战武器包。
 4. 新增烟雾弹服务端同步、爆炸视觉效果网络包、烟雾内玩家名牌隐藏。
-5. 自带战术道具资源首次启动时自动解压至`tacz/default_melee/`目录，方便用户调整配置。
-6. 支持在Index中通过`tooltip`字段自定义Lore文案，兼容翻译键和HEX颜色。
+5. 支持在Index中通过`tooltip`字段自定义Lore文案，兼容翻译键和HEX颜色。
+
+## 资源包与构建方式
+
+> 本仓库及公开核心JAR不包含原作者All Rights Reserved的模型、贴图、动画或音效。相关资源仅保留在开发者本地；构建脚本只提供可选的本地打包能力。
+
+代码核心与原作者All Rights Reserved美术资源已分离。默认内容的`assets/lrtactical`与`data/lrtactical`不会进入公开核心JAR。
+
+```powershell
+# 公开核心JAR，不包含官方默认内容
+.\gradlew.bat build
+
+# 单独生成可放入.minecraft/tacz/的官方资源包
+.\gradlew.bat buildOfficialPack
+
+# 生成内嵌官方资源包、首次启动自动释放的本地完整JAR
+.\gradlew.bat buildBundled
+
+# 将官方资源包安装到开发运行目录
+.\gradlew.bat installOfficialPackForRuns
+```
+
+产物位置：
+
+- 核心及完整JAR：`build/libs/`
+- 外置官方资源包：`build/packs/lrtactical-official-resources-<版本>.zip`
+- 完整JAR自动释放位置：`.minecraft/tacz/lrtactical_official_resources/`
+
+完整JAR会把内嵌包展开为TACZ原生文件夹资源包，不会覆盖用户手动安装的同名资源包，也不会覆盖已经修改过的自动释放目录。只有核心JAR且没有任何适配资源包时，模组仍可正常启动：三个创造分类使用雪球、金苹果和下界合金剑作为安全图标，默认内容列表为空。
+
+本地官方资源保存在被Git忽略的`src/main/resources/assets/lrtactical/`中。缺少该目录时，核心构建仍可正常完成，但`buildOfficialPack`和`buildBundled`会给出明确错误。
+
+`build/packs/`中的资源包与带`-bundled`后缀的JAR可能包含本地ARR美术资源；在未获得原作者授权时，请勿将这些本地产物上传或公开分发。公开发布应使用不带`-bundled`后缀的核心JAR。
 
 ## 配置文件
 
